@@ -6,12 +6,14 @@ import * as Shaders from './shaders.js';
 import * as Factory from './celestialFactory.js';
 import PhysicsEngine from './PhysicsEngine.js';
 import SolarSystemBuilder from './SolarSystemBuilder.js';
+import FlareSystem from './FlareSystem.js'; // Import FlareSystem
 
 // --- Global Variables ---
 let scene, camera, renderer, controls, clock, textureLoader;
 let sunLight, ambientLight;
 let physicsEngine;
 let solarSystemBuilder;
+let flareSystem; // Add flare system instance
 
 // Materials (created once, passed to builder)
 let earthMaterial, sunGlowMaterial, atmosphereMaterial, sunMaterialBasic, sunMaterialShader;
@@ -34,6 +36,7 @@ async function init() {
     setupControls();
 
     physicsEngine = new PhysicsEngine(); // Instantiate physics engine
+    flareSystem = new FlareSystem(scene, 200); // Instantiate flare system (e.g., 200 particles)
 
     try {
         textures = await loadTextures(); // Assign to the higher-scoped variable
@@ -173,6 +176,7 @@ function createSharedMaterials(textures) {
         uCameraPosition: { value: camera.position },
         uGlowColor: { value: new THREE.Color(Config.SUN_GLOW_COLOR.r, Config.SUN_GLOW_COLOR.g, Config.SUN_GLOW_COLOR.b) },
         uGlowIntensity: { value: Config.GLOW_INTENSITY_MULTIPLIER },
+        uTime: { value: 0.0 }, // Add missing uTime uniform for glow noise animation
         uGlowExponent: { value: Config.GLOW_FALLOFF_EXPONENT }
     };
     sunGlowMaterial = Factory.createGlowMaterial(Shaders, sunGlowUniforms);
@@ -316,6 +320,7 @@ function animate() {
     const elapsedTime = clock.getElapsedTime();
 
     // --- Get dynamic objects from builder ---
+    const sunMesh = solarSystemBuilder.getSunMesh(); // Get sun mesh for flare origin & shader toggle
     const earthMesh = solarSystemBuilder.getEarthMesh();
     const cloudMesh = solarSystemBuilder.getCloudMesh();
     const moonOrbitAnchor = solarSystemBuilder.getMoonOrbitAnchor();
@@ -347,13 +352,33 @@ function animate() {
         targetIndicator.visible = !cameraLockedToEarth;
     }
 
+    // --- Trigger Flares (Example: Randomly) ---
+    if (sunMesh && flareSystem && Math.random() < 0.01) { // Low probability each frame
+        const surfacePoint = new THREE.Vector3();
+        // Get a random point on the sphere surface
+        surfacePoint.setFromSphericalCoords(
+            Config.SUN_RADIUS + 0.1, // Start slightly above surface
+            Math.acos(2 * Math.random() - 1), // Random phi (latitude)
+            Math.random() * Math.PI * 2 // Random theta (longitude)
+        );
+        const direction = surfacePoint.clone().normalize(); // Flare direction is outward from surface point
+        flareSystem.createFlare(surfacePoint, direction);
+    }
+
+    // --- Update Flare System ---
+    if (flareSystem) {
+        flareSystem.update(dt);
+    }
+
     // --- Update Shader Uniforms ---
     earthMaterial.uniforms.uTime.value = elapsedTime;
     earthMaterial.uniforms.uCameraPosition.value.copy(camera.position);
     // Update sun direction based on point light position (it's fixed at origin)
     // earthMaterial.uniforms.sunDirection.value.copy(sunLight.position); // Already set?
     sunGlowMaterial.uniforms.uCameraPosition.value.copy(camera.position);
+    sunGlowMaterial.uniforms.uTime.value = elapsedTime; // Add time update for glow noise
     atmosphereMaterial.uniforms.uCameraPosition.value.copy(camera.position);
+    // atmosphereMaterial.uniforms.uTime.value = elapsedTime; // Add if needed for atmosphere effects later
     if (sunShaderEnabled && sunMaterialShader) {
         sunMaterialShader.uniforms.uTime.value = elapsedTime;
     }

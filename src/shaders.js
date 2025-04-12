@@ -110,52 +110,65 @@ export const SUN_FRAGMENT_SHADER = `
 
   void main() {
     vec2 uv = vUv;
-    float time = uTime * 0.03; // Significantly slowed down time
+    float time = uTime * 0.05; // Slightly faster base time
 
-    // --- Granulation Layers ---
-    // Layer 1: Larger, slower cells
-    vec2 uv1 = uv * 3.0; // Scale for larger features
-    uv1 = rotate(time * 0.2) * uv1; // Slow rotation
-    float noise1 = fbm(uv1 + vec2(time * 0.05)); // Slow movement
-
-    // Layer 2: Smaller, faster details overlay
-    vec2 uv2 = uv * 8.0; // Scale for smaller features
-    uv2 = rotate(-time * 0.5) * uv2; // Faster counter-rotation
-    float noise2 = fbm(uv2 + vec2(-time * 0.1)); // Faster movement
-
-    // Combine noise layers
-    float combinedNoise = noise1 * 0.6 + noise2 * 0.4;
-
-    // --- Heat Wave Distortion --- (Subtler)
-    vec2 distortionUv = uv * 4.0 + time * 0.2;
-    vec2 distortion = vec2(noise(distortionUv), noise(distortionUv + vec2(5.2, 1.3))) * 0.03; // Reduced distortion amount
-    float finalNoise = fbm((uv + distortion) * 3.0 + vec2(time * 0.05)); // Re-sample combined noise scale with distortion
-
-    // --- Color Palette ---
-    vec3 color1 = vec3(0.8, 0.3, 0.0); // Deep Orange/Red
-    vec3 color2 = vec3(1.0, 0.6, 0.0); // Bright Orange
-    vec3 color3 = vec3(1.0, 0.9, 0.5); // Bright Yellow/White
-
-    // Mix colors based on final noise value
-    vec3 color = mix(color1, color2, smoothstep(0.3, 0.55, finalNoise));
-    color = mix(color, color3, smoothstep(0.5, 0.7, finalNoise)); // Less dominant bright highlights
-
-    // --- Subtle Sparks (Less frequent, less flickery) ---
-    float sparkNoise = noise(uv * 15.0 + time * 0.5); // Different scale/speed for sparks
-    float sparkThreshold = 0.95; // Higher threshold = fewer sparks
-    if (sparkNoise > sparkThreshold) {
-        float sparkIntensity = smoothstep(sparkThreshold, 1.0, sparkNoise);
-        // Use noise value itself for intensity, avoid sin modulation
-        color = mix(color, vec3(1.0, 1.0, 0.9), sparkIntensity * 0.5); // Less intense white sparks
-    }
-
-    // --- Limb Darkening --- (More pronounced)
+    // Calculate distance from center for limb effects
     float edgeFactor = length(uv - 0.5) * 2.0; // Distance from center [0, 1]
-    edgeFactor = smoothstep(0.6, 1.0, edgeFactor); // Apply darkening more towards the edge
-    color *= (1.0 - edgeFactor * 0.6); // Stronger darkening effect
-    color = mix(color, color1 * 0.5, edgeFactor); // Shift edge color towards darker base
+    float limbDarkeningFactor = smoothstep(0.6, 1.0, edgeFactor); // More darkening towards edge
+    float limbBrighteningFactor = smoothstep(0.8, 0.95, edgeFactor); // Brightening concentrated near the very edge
 
-    gl_FragColor = vec4(color, 1.0);
+    // --- Granulation Layers (More contrast, slightly different speeds/scales) ---
+    vec2 uv1 = uv * 4.0; // Slightly smaller scale
+    uv1 = rotate(time * 0.1) * uv1; // Slower rotation
+    float noise1 = fbm(uv1 + vec2(time * 0.02));
+
+    vec2 uv2 = uv * 10.0; // Smaller details
+    uv2 = rotate(-time * 0.3) * uv2; // Faster counter-rotation
+    float noise2 = fbm(uv2 + vec2(-time * 0.05));
+
+    // Combine granulation noise - use power for more contrast
+    float granulationNoise = pow(noise1 * 0.6 + noise2 * 0.4, 1.5);
+
+    // --- Sunspots (Larger scale, slow moving dark patches) ---
+    vec2 uvSunspots = uv * 1.5; // Large scale
+    uvSunspots = rotate(time * 0.05) * uvSunspots; // Very slow rotation
+    float sunspotNoise = fbm(uvSunspots + vec2(time * 0.01));
+    float sunspotMask = smoothstep(0.3, 0.4, sunspotNoise); // Areas below 0.4 are spots
+
+    // --- Faculae (Bright patches, often near spots or limb) ---
+    vec2 uvFaculae = uv * 5.0; // Medium scale
+    uvFaculae = rotate(time * 0.15) * uvFaculae;
+    float faculaeNoise = fbm(uvFaculae + vec2(time * 0.03));
+    // Make faculae stronger near limb and where sunspot mask is high (edges of spots)
+    float faculaeMask = smoothstep(0.6, 0.7, faculaeNoise) * (limbBrighteningFactor * 0.5 + (1.0 - sunspotMask) * 0.5);
+
+    // --- Heat Wave Distortion (Apply to final noise lookup) ---
+    vec2 distortionUv = uv * 5.0 + time * 0.1;
+    vec2 distortion = vec2(noise(distortionUv), noise(distortionUv + vec2(5.2, 1.3))) * 0.02; // Slightly less distortion
+    float finalNoise = pow(fbm((uv + distortion) * 4.0 + vec2(time * 0.02)), 1.5); // Use distorted UVs, add contrast
+
+    // --- Color Palette (Adjusted for more intensity) ---
+    vec3 colorDark = vec3(0.6, 0.15, 0.0);  // Darker base for spots/limb
+    vec3 colorMid = vec3(1.0, 0.4, 0.0);   // Main orange
+    vec3 colorBright = vec3(1.0, 0.8, 0.3); // Bright yellow
+    vec3 colorHottest = vec3(1.0, 1.0, 0.8); // Near white
+
+    // Mix colors based on combined granulation noise
+    vec3 baseColor = mix(colorDark, colorMid, smoothstep(0.2, 0.5, finalNoise));
+    baseColor = mix(baseColor, colorBright, smoothstep(0.45, 0.65, finalNoise));
+    baseColor = mix(baseColor, colorHottest, smoothstep(0.6, 0.8, finalNoise)); // More range for hottest
+
+    // Apply Sunspots (Darken based on mask)
+    baseColor = mix(baseColor, colorDark * 0.5, sunspotMask); // Make spots significantly darker
+
+    // Apply Faculae (Brighten based on mask)
+    baseColor = mix(baseColor, colorHottest, faculaeMask * 0.6); // Additive brightening, controlled intensity
+
+    // --- Limb Darkening ---
+    baseColor *= (1.0 - limbDarkeningFactor * 0.7); // Apply darkening
+    baseColor = mix(baseColor, colorDark * 0.6, limbDarkeningFactor); // Blend towards dark at edge
+
+    gl_FragColor = vec4(baseColor, 1.0);
   }
 `;
 
@@ -265,17 +278,58 @@ export const GLOW_FRAGMENT_SHADER = `
   uniform vec3 uGlowColor;
   uniform float uGlowIntensity;
   uniform float uGlowExponent;
+  uniform float uTime; // Add time uniform for animated noise
 
   varying vec3 vNormal;
   varying vec3 vWorldPosition; // Receive world position
+
+  // Noise function (can reuse from Sun shader or define here)
+  float random (vec2 st) {
+      return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+  }
+
+  float noise (in vec2 st) {
+      vec2 i = floor(st);
+      vec2 f = fract(st);
+      float a = random(i);
+      float b = random(i + vec2(1.0, 0.0));
+      float c = random(i + vec2(0.0, 1.0));
+      float d = random(i + vec2(1.0, 1.0));
+      vec2 u = f*f*(3.0-2.0*f);
+      return mix(a, b, u.x) + (c - a)* u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+  }
+
+   float fbm (in vec2 st) {
+      float value = 0.0;
+      float amplitude = .5;
+      for (int i = 0; i < 3; i++) { // Fewer octaves for glow noise
+          value += amplitude * noise(st);
+          st *= 2.;
+          amplitude *= .5;
+      }
+      return value;
+  }
+
 
   void main() {
     // Calculate view direction (from surface point to camera)
     vec3 viewDirection = normalize( uCameraPosition - vWorldPosition );
 
-    // Calculate intensity based on the dot product of the normal and view direction
-    float intensity = pow( 1.0 - abs( dot( vNormal, viewDirection ) ), uGlowExponent );
+    // Calculate base intensity based on the dot product (rim lighting)
+    float rimIntensity = pow( 1.0 - abs( dot( vNormal, viewDirection ) ), uGlowExponent );
 
-    gl_FragColor = vec4( uGlowColor, intensity * uGlowIntensity );
+    // Calculate noise based on world position projected onto a plane (or use UVs if available/meaningful)
+    // Project world position onto XY plane relative to center for noise coordinates
+    vec2 noiseCoord = vWorldPosition.xy * 0.1 + uTime * 0.02; // Scale and animate noise lookup
+    float glowNoise = fbm(noiseCoord);
+
+    // Modulate intensity and color with noise
+    float noiseFactor = 0.7 + glowNoise * 0.6; // Add variation, ensure base intensity > 0
+    float finalIntensity = rimIntensity * noiseFactor;
+
+    // Slightly vary color based on noise too (optional)
+    vec3 noisyColor = uGlowColor * (0.9 + glowNoise * 0.2);
+
+    gl_FragColor = vec4( noisyColor, finalIntensity * uGlowIntensity );
   }
 `;
