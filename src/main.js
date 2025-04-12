@@ -9,11 +9,14 @@ import * as Factory from './celestialFactory.js';
 let scene, camera, renderer, controls, clock, textureLoader;
 let sunLight, ambientLight;
 let earthMaterial, sunGlowMaterial, atmosphereMaterial; // Materials needing uniform updates
+let sunMesh, sunMaterialBasic, sunMaterialShader; // Sun specific objects
+let sunShaderEnabled = false; // State for sun shader toggle
 let earthMesh, cloudMesh, moonOrbitAnchor, earthSystemAnchor; // Objects needing rotation updates
 const planetOrbits = []; // Array to hold { anchor: Object3D, speed: number } - Used for simple rotation
 let normalMappingEnabled = Config.EARTH_NORMAL_MAP_TOGGLE_DEFAULT;
 let cameraLockedToEarth = true; // Default: Camera follows Earth
 const earthWorldPosition = new THREE.Vector3(); // Helper vector
+let targetIndicator; // For visualizing the camera target
 
 // --- Physics State ---
 let gravitySimulationEnabled = false;
@@ -81,7 +84,7 @@ function setupLighting() {
 function setupControls() {
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.minDistance = 1.5; // Keep close zoom for Earth
+    controls.minDistance = 0.1; // Allow much closer zoom to Earth
     controls.maxDistance = Config.CONTROLS_MAX_DISTANCE;
 }
 
@@ -170,13 +173,29 @@ function createMaterials() {
         uGlowExponent: { value: Config.GLOW_FALLOFF_EXPONENT }
     };
     atmosphereMaterial = Factory.createGlowMaterial(Shaders, atmosphereUniforms);
+
+    // --- Sun Materials (Basic Texture + Custom Shader) ---
+    // Basic texture material
+    sunMaterialBasic = Factory.createBasicMaterial(textures.sun);
+
+    // Custom shader material
+    const sunShaderUniforms = {
+        uTime: { value: 0.0 }
+        // Add other uniforms like uResolution if needed by the shader
+    };
+    sunMaterialShader = Factory.createShaderMaterial(
+        Shaders.SUN_VERTEX_SHADER,
+        Shaders.SUN_FRAGMENT_SHADER,
+        sunShaderUniforms
+    );
 }
 
 function createSolarSystem() {
     // --- Sun ---
     const sunGeometry = Factory.createSphereGeometry(Config.SUN_RADIUS);
-    const sunMaterial = Factory.createBasicMaterial(textures.sun);
-    const sunMesh = Factory.createMesh(sunGeometry, sunMaterial);
+    // Use the globally created basic material initially
+    // Assign to the global sunMesh variable
+    sunMesh = Factory.createMesh(sunGeometry, sunMaterialBasic);
     sunMesh.position.set(0, 0, 0);
     scene.add(sunMesh);
     // Add Sun to physics bodies (fixed position, zero velocity)
@@ -299,12 +318,84 @@ function createSolarSystem() {
         // Store for simple rotation (fallback)
         planetOrbits.push({ anchor: planetOrbitAnchor, speed: data.orbitSpeedFactor });
     });
+
+    // --- Target Indicator ---
+    const targetMaterial = new THREE.SpriteMaterial({
+        color: 0x00ff00, // Green
+        transparent: true,
+        opacity: 0.6,
+        sizeAttenuation: false, // Keep constant screen size
+        depthTest: false // Draw on top
+    });
+    targetIndicator = new THREE.Sprite(targetMaterial);
+    targetIndicator.scale.set(0.03, 0.03, 1); // Adjust size as needed
+    targetIndicator.visible = !cameraLockedToEarth; // Initially hidden if locked to Earth
+    scene.add(targetIndicator);
 }
 
 
 function setupEventListeners() {
     window.addEventListener('resize', onWindowResize, false);
-    window.addEventListener('keydown', onKeyDown, false);
+    // window.addEventListener('keydown', onKeyDown, false); // Replaced by UI buttons
+
+    // Add UI Button Listeners
+    const gravityBtn = document.getElementById('toggle-gravity-btn');
+    const focusBtn = document.getElementById('toggle-focus-btn');
+    const sunShaderBtn = document.getElementById('toggle-sun-shader-btn'); // Get new button
+
+    if (gravityBtn) {
+        // Set initial text based on default state
+        gravityBtn.textContent = `Gravity: ${gravitySimulationEnabled ? 'On' : 'Off'}`;
+        // Add click listener
+        gravityBtn.addEventListener('click', () => {
+            gravitySimulationEnabled = !gravitySimulationEnabled;
+            console.log(`Gravity Simulation ${gravitySimulationEnabled ? 'Enabled' : 'Disabled'}`);
+            gravityBtn.textContent = `Gravity: ${gravitySimulationEnabled ? 'On' : 'Off'}`;
+            if (gravitySimulationEnabled) {
+                // Initialize velocities for circular orbits when starting simulation
+                initializeOrbitalVelocities();
+            }
+            // No need to reset positions when disabling, simple rotation takes over
+        });
+    } else {
+        console.error("Gravity toggle button not found!");
+    }
+
+    if (focusBtn) {
+        // Set initial text based on default state
+        focusBtn.textContent = `Focus: ${cameraLockedToEarth ? 'Earth' : 'Sun'}`;
+        // Add click listener
+        focusBtn.addEventListener('click', () => {
+            cameraLockedToEarth = !cameraLockedToEarth;
+            console.log(`Camera Lock to Earth: ${cameraLockedToEarth}`);
+            focusBtn.textContent = `Focus: ${cameraLockedToEarth ? 'Earth' : 'Sun'}`;
+            if (!cameraLockedToEarth && controls) { // Check if controls exist
+                // When unlocking (focusing Sun), immediately reset target to origin
+                controls.target.set(0, 0, 0);
+            }
+            // If locking (focusing Earth), the target will be updated in the animate loop
+        });
+    } else {
+        console.error("Focus toggle button not found!");
+    }
+
+    if (sunShaderBtn) {
+        // Set initial text
+        sunShaderBtn.textContent = `Sun Shader: ${sunShaderEnabled ? 'On' : 'Off'}`;
+        // Add click listener
+        sunShaderBtn.addEventListener('click', () => {
+            if (!sunMesh) {
+                console.error("Sun mesh not found for shader toggle!");
+                return;
+            }
+            sunShaderEnabled = !sunShaderEnabled;
+            console.log(`Sun Shader ${sunShaderEnabled ? 'Enabled' : 'Disabled'}`);
+            sunMesh.material = sunShaderEnabled ? sunMaterialShader : sunMaterialBasic;
+            sunShaderBtn.textContent = `Sun Shader: ${sunShaderEnabled ? 'On' : 'Off'}`;
+        });
+    } else {
+        console.error("Sun shader toggle button not found!");
+    }
 }
 
 function onWindowResize() {
@@ -355,7 +446,9 @@ function onKeyDown(event) {
         normalMappingEnabled = !normalMappingEnabled;
         console.log(`Normal Mapping ${normalMappingEnabled ? 'Enabled' : 'Disabled'}`);
         earthMaterial.uniforms.uNormalMappingEnabled.value = normalMappingEnabled ? 1.0 : 0.0;
-    } else if (event.key === 'c' || event.key === 'C') {
+    }
+    /* // Replaced by UI button
+    else if (event.key === 'c' || event.key === 'C') {
         cameraLockedToEarth = !cameraLockedToEarth;
         console.log(`Camera Lock to Earth: ${cameraLockedToEarth}`);
         if (!cameraLockedToEarth && controls) { // Check if controls exist
@@ -363,7 +456,10 @@ function onKeyDown(event) {
             controls.target.set(0, 0, 0);
         }
         // If locking, the target will be updated in the animate loop
-    } else if (event.key === 'g' || event.key === 'G') {
+    }
+    */
+    /* // Replaced by UI button
+    else if (event.key === 'g' || event.key === 'G') {
         gravitySimulationEnabled = !gravitySimulationEnabled;
         console.log(`Gravity Simulation ${gravitySimulationEnabled ? 'Enabled' : 'Disabled'}`);
         if (gravitySimulationEnabled) {
@@ -372,6 +468,7 @@ function onKeyDown(event) {
         }
         // No need to reset positions when disabling, simple rotation takes over
     }
+    */
 }
 
 // --- Physics Calculation ---
@@ -432,11 +529,21 @@ function animate() {
     // Update controls AFTER potentially changing the target
     controls.update();
 
+    // Update target indicator position and visibility
+    if (targetIndicator) {
+        targetIndicator.position.copy(controls.target);
+        targetIndicator.visible = !cameraLockedToEarth; // Only show when target might not be Earth
+    }
+
     // Update uniforms
     earthMaterial.uniforms.uTime.value = elapsedTime;
     earthMaterial.uniforms.uCameraPosition.value.copy(camera.position);
     sunGlowMaterial.uniforms.uCameraPosition.value.copy(camera.position);
     atmosphereMaterial.uniforms.uCameraPosition.value.copy(camera.position);
+    // Update Sun shader time uniform if active
+    if (sunShaderEnabled && sunMaterialShader) {
+        sunMaterialShader.uniforms.uTime.value = elapsedTime;
+    }
 
     // LOD Check (Simplified - only for Earth currently)
     const currentDistance = controls.getDistance(); // Or distance to Earth specifically
