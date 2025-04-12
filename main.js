@@ -9,8 +9,10 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x101010); // Darker background for space
 
 // Camera
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.z = 3; // Closer view
+// Increased far plane to see distant planets
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
+camera.position.z = 15; // Start further back to see more planets initially
+camera.position.y = 5; // Slightly elevated view
 
 // Renderer (WebGL)
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -22,7 +24,7 @@ document.body.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; // Smooth camera movement
 controls.minDistance = 1.5;
-controls.maxDistance = 10;
+controls.maxDistance = 5000; // Allow zooming out further
 
 // Lighting
 // Ambient light to softly illuminate the dark side
@@ -36,6 +38,32 @@ scene.add(sunLight);
 
 // Texture Loader
 const textureLoader = new THREE.TextureLoader();
+
+// --- Planet Data (Approximate relative values) ---
+const planetData = [
+    { name: "Mercury", textureFile: "8k_mercury.jpg", size: 0.38, orbitRadius: 4, orbitSpeed: 1.6 },
+    { name: "Venus", textureFile: "8k_venus_surface.jpg", atmosphereTextureFile: "4k_venus_atmosphere.jpg", size: 0.95, orbitRadius: 7, orbitSpeed: 1.17 },
+    { name: "Mars", textureFile: "8k_mars.jpg", size: 0.53, orbitRadius: 15, orbitSpeed: 0.8 },
+    { name: "Jupiter", textureFile: "8k_jupiter.jpg", size: 11.2, orbitRadius: 52, orbitSpeed: 0.43 },
+    { name: "Saturn", textureFile: "8k_saturn.jpg", size: 9.45, orbitRadius: 95, orbitSpeed: 0.32, hasRings: true },
+    { name: "Uranus", textureFile: "2k_uranus.jpg", size: 4.0, orbitRadius: 192, orbitSpeed: 0.23 },
+    { name: "Neptune", textureFile: "2k_neptune.jpg", size: 3.88, orbitRadius: 301, orbitSpeed: 0.18 }
+];
+const planetOrbits = []; // To store orbit anchors for animation
+
+// --- Sun Visual ---
+const sunTexture = textureLoader.load('8k_sun.jpg'); // Load sun texture
+const sunGeometry = new THREE.SphereGeometry(0.2, 32, 32); // Small sphere
+const sunMaterial = new THREE.MeshBasicMaterial({ map: sunTexture }); // Use texture map
+const sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
+sunMesh.position.set(0, 0, 0); // Place Sun at the origin
+scene.add(sunMesh);
+
+// --- Earth System Anchor ---
+const earthSystemAnchor = new THREE.Object3D();
+const earthOrbitRadius = 10; // Define Earth's orbit radius
+earthSystemAnchor.position.x = earthOrbitRadius;
+scene.add(earthSystemAnchor); // Add the anchor to the main scene
 
 // Load Textures (Low Res)
 const earthDayTextureLow = textureLoader.load('earth_day.jpg');
@@ -51,6 +79,17 @@ const earthNightTextureHigh = textureLoader.load('earth_night_8K.jpg');
 const earthSpecularMapHigh = textureLoader.load('8k_earth_specular_map.png'); // Use 8k specular map
 const earthCloudsTextureHigh = textureLoader.load('earth_clouds_8k.jpg');
 const earthNormalMapHigh = textureLoader.load('8k_earth_normal_map.png'); // Load Normal Map High Res
+const moonTexture = textureLoader.load('8k_moon.jpg'); // Load moon texture
+
+// Load other planet textures
+const mercuryTexture = textureLoader.load(planetData.find(p => p.name === "Mercury").textureFile);
+const venusTexture = textureLoader.load(planetData.find(p => p.name === "Venus").textureFile);
+const venusAtmosphereTexture = textureLoader.load(planetData.find(p => p.name === "Venus").atmosphereTextureFile);
+const marsTexture = textureLoader.load(planetData.find(p => p.name === "Mars").textureFile);
+const jupiterTexture = textureLoader.load(planetData.find(p => p.name === "Jupiter").textureFile);
+const saturnTexture = textureLoader.load(planetData.find(p => p.name === "Saturn").textureFile);
+const uranusTexture = textureLoader.load(planetData.find(p => p.name === "Uranus").textureFile);
+const neptuneTexture = textureLoader.load(planetData.find(p => p.name === "Neptune").textureFile);
 
 // --- Set Texture Properties ---
 
@@ -69,6 +108,15 @@ earthNightTextureHigh.wrapS = earthNightTextureHigh.wrapT = THREE.RepeatWrapping
 earthCloudsTextureHigh.wrapS = earthCloudsTextureHigh.wrapT = THREE.RepeatWrapping;
 earthSpecularMapHigh.wrapS = earthSpecularMapHigh.wrapT = THREE.RepeatWrapping;
 earthNormalMapHigh.wrapS = earthNormalMapHigh.wrapT = THREE.RepeatWrapping; // Set wrapping for normal map
+moonTexture.encoding = THREE.sRGBEncoding; // Set moon texture encoding
+mercuryTexture.encoding = THREE.sRGBEncoding;
+venusTexture.encoding = THREE.sRGBEncoding;
+// venusAtmosphereTexture encoding might not need changing if it's just for opacity/blending
+marsTexture.encoding = THREE.sRGBEncoding;
+jupiterTexture.encoding = THREE.sRGBEncoding;
+saturnTexture.encoding = THREE.sRGBEncoding;
+uranusTexture.encoding = THREE.sRGBEncoding;
+neptuneTexture.encoding = THREE.sRGBEncoding;
 earthDayTextureHigh.encoding = THREE.sRGBEncoding;
 
 
@@ -217,7 +265,8 @@ const customEarthMaterial = new THREE.ShaderMaterial({
 
 // Earth Mesh
 const earthMesh = new THREE.Mesh(earthGeometry, customEarthMaterial); // Use the new custom material
-scene.add(earthMesh);
+// scene.add(earthMesh); // Remove from main scene
+earthSystemAnchor.add(earthMesh); // Add Earth to its system anchor
 
 
 // Cloud Layer Geometry
@@ -234,7 +283,8 @@ const cloudMaterial = new THREE.MeshPhongMaterial({ // Phong for potential specu
 
 // Cloud Mesh
 const cloudMesh = new THREE.Mesh(cloudGeometry, cloudMaterial);
-scene.add(cloudMesh);
+// scene.add(cloudMesh); // Remove from main scene
+earthMesh.add(cloudMesh); // Add clouds directly to Earth mesh
 
 
 // --- Atmospheric Glow ---
@@ -286,6 +336,118 @@ const atmosphereMaterial = new THREE.ShaderMaterial({
 const atmosphereGeometry = new THREE.SphereGeometry(1.04, 512, 512); // Slightly larger than clouds
 const atmosphereMesh = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
 scene.add(atmosphereMesh);
+
+
+// --- Sun Glow ---
+// Reuse atmosphere shader logic, just change color and size
+const sunGlowVertexShader = atmosphereVertexShader; // Vertex shader can be the same
+
+const sunGlowFragmentShader = `
+  uniform vec3 uCameraPosition; // Get camera position
+  varying vec3 vNormal;
+  varying vec3 vWorldPosition; // Receive world position
+
+  void main() {
+    // Calculate view direction (from surface point to camera)
+    vec3 viewDirection = normalize( uCameraPosition - vWorldPosition );
+
+    // Calculate intensity based on the dot product of the normal and view direction
+    float intensity = pow( 1.0 - abs( dot( vNormal, viewDirection ) ), 3.0 ); // Adjust exponent (e.g., 3.0) for falloff
+
+    vec3 glowColor = vec3(1.0, 0.7, 0.2); // Orangey-yellow glow for Sun
+
+    gl_FragColor = vec4( glowColor, intensity * 0.8 ); // Multiply intensity to control brightness
+  }
+`;
+
+const sunGlowMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    uCameraPosition: { value: camera.position } // Add camera position uniform
+  },
+  vertexShader: sunGlowVertexShader,
+  fragmentShader: sunGlowFragmentShader,
+  blending: THREE.AdditiveBlending,
+  side: THREE.BackSide,
+  transparent: true,
+  depthWrite: false
+});
+
+const sunGlowGeometry = new THREE.SphereGeometry(0.6, 64, 64); // Larger than sun sphere (0.2)
+const sunGlowMesh = new THREE.Mesh(sunGlowGeometry, sunGlowMaterial);
+sunGlowMesh.position.set(0, 0, 0); // Center it with the sun
+scene.add(sunGlowMesh);
+
+
+// --- Moon ---
+const moonOrbitAnchor = new THREE.Object3D(); // Anchor for moon's orbit
+// scene.add(moonOrbitAnchor); // Remove from main scene
+earthSystemAnchor.add(moonOrbitAnchor); // Add Moon's orbit anchor to Earth's system anchor
+
+const moonGeometry = new THREE.SphereGeometry(0.27, 64, 64); // Approx 1/4 Earth size
+const moonMaterial = new THREE.MeshStandardMaterial({ map: moonTexture }); // Use texture map
+const moonMesh = new THREE.Mesh(moonGeometry, moonMaterial);
+moonMesh.position.x = 2.5; // Distance from Earth (orbit radius)
+moonOrbitAnchor.add(moonMesh); // Add moon to the orbit anchor
+
+
+// --- Create Other Planets ---
+const textureMap = { // Helper to access loaded textures by name
+    "Mercury": mercuryTexture,
+    "Venus": venusTexture,
+    "Mars": marsTexture,
+    "Jupiter": jupiterTexture,
+    "Saturn": saturnTexture,
+    "Uranus": uranusTexture,
+    "Neptune": neptuneTexture
+};
+
+planetData.forEach(data => {
+    const planetOrbitAnchor = new THREE.Object3D();
+    scene.add(planetOrbitAnchor);
+
+    const planetGeometry = new THREE.SphereGeometry(data.size, 64, 64);
+    const planetMaterial = new THREE.MeshStandardMaterial({ map: textureMap[data.name] });
+    const planetMesh = new THREE.Mesh(planetGeometry, planetMaterial);
+    planetMesh.position.x = data.orbitRadius; // Position relative to orbit anchor
+    planetOrbitAnchor.add(planetMesh);
+
+    // Special cases
+    if (data.name === "Venus" && data.atmosphereTextureFile) {
+        const venusAtmosGeometry = new THREE.SphereGeometry(data.size * 1.02, 64, 64); // Slightly larger
+        const venusAtmosMaterial = new THREE.MeshPhongMaterial({
+            map: venusAtmosphereTexture,
+            transparent: true,
+            opacity: 0.3,
+            blending: THREE.AdditiveBlending, // Optional: experiment with blending
+            depthWrite: false
+        });
+        const venusAtmosMesh = new THREE.Mesh(venusAtmosGeometry, venusAtmosMaterial);
+        // Atmosphere doesn't need to be offset from anchor if planet is at anchor's x offset
+        planetOrbitAnchor.add(venusAtmosMesh);
+    }
+
+    if (data.name === "Saturn" && data.hasRings) {
+        const ringInnerRadius = data.size * 1.2;
+        const ringOuterRadius = data.size * 2.2;
+        const ringGeometry = new THREE.RingGeometry(ringInnerRadius, ringOuterRadius, 64);
+        // Rotate ring geometry to be flat along XZ plane
+        ringGeometry.rotateX(-Math.PI / 2);
+        // Simple ring material (replace with texture if available)
+        const ringMaterial = new THREE.MeshStandardMaterial({
+            color: 0xaaaaaa, // Placeholder color
+            side: THREE.DoubleSide, // Render both sides
+            transparent: true, // Make slightly transparent if desired
+             opacity: 0.8
+          });
+         const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
+         // Ring is centered on the planet, so add to the planet mesh
+         planetMesh.add(ringMesh);
+     }
+
+
+     // Store orbit anchor and speed for animation
+    planetOrbits.push({ anchor: planetOrbitAnchor, speed: data.orbitSpeed });
+});
 
 
 // Handle window resize
@@ -358,6 +520,8 @@ function animate() {
 
     // Update atmosphere camera position uniform
     atmosphereMaterial.uniforms.uCameraPosition.value.copy(camera.position);
+    // Update sun glow camera position uniform
+    sunGlowMaterial.uniforms.uCameraPosition.value.copy(camera.position);
 
     // Update time uniform for water animation
     customEarthMaterial.uniforms.uTime.value = elapsedTime;
@@ -367,6 +531,17 @@ function animate() {
 
     // Rotate Clouds slightly faster/different
     cloudMesh.rotation.y += 0.12 * delta;
+
+    // Rotate Moon Orbit Anchor (relative to Earth system)
+    moonOrbitAnchor.rotation.y += 0.5 * delta; // Adjust speed as needed
+
+    // Rotate Earth System Anchor (around Sun)
+    earthSystemAnchor.rotation.y += 1.0 * delta * 0.1; // Earth's relative speed = 1.0
+
+    // Rotate Planet Orbits
+    planetOrbits.forEach(orbit => {
+        orbit.anchor.rotation.y += orbit.speed * delta * 0.1; // Slow down overall orbit speed
+    });
 
     // Update controls for damping
     controls.update();
