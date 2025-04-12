@@ -30,6 +30,20 @@
         #ui-controls button:hover {
             background-color: rgba(50, 50, 50, 0.8);
         }
+        #ui-controls label {
+            display: block;
+            color: white;
+            font-family: sans-serif;
+            font-size: 12px;
+            margin-top: 10px;
+            margin-bottom: 2px;
+            text-align: center;
+        }
+        #ui-controls input[type="range"] {
+            display: block;
+            width: 120px; /* Match button width */
+            margin-bottom: 5px;
+        }
     </style>
 </head>
 <body>
@@ -37,6 +51,8 @@
         <button id="toggle-gravity-btn">Gravity: Off</button>
         <button id="toggle-focus-btn">Focus: Earth</button>
         <button id="toggle-sun-shader-btn">Sun Shader: Off</button>
+        <label id="asteroid-group-label" for="asteroid-group-slider">Asteroid Group Size: 50</label>
+        <input type="range" id="asteroid-group-slider" name="asteroid-group-slider" min="10" max="500" step="10" value="50">
     </div>
     <script type="importmap">
         {

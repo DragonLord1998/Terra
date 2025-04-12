@@ -36,6 +36,23 @@ export const PLANET_DATA = [
     { name: "Neptune", textureFile: "2k_neptune.jpg", sizeFactor: 3.88, orbitRadius: 3010, orbitSpeedFactor: 0.18, mass: 17.1 } // Increased orbitRadius
 ];
 
+// --- Asteroid Belt Data ---
+// Defines the properties for asteroid belts
+export const ASTEROID_BELT_DATA = [
+    {
+        name: "MainBelt",
+        innerRadius: 200, // Between Mars (150) and Jupiter (520)
+        outerRadius: 400,
+        thickness: 10,    // Vertical spread
+        count: 5000,      // Number of asteroids
+        particleSize: 0.1, // Visual size of each asteroid point
+        color: 0x888888,  // Greyish color
+        orbitSpeedFactor: 0.6, // Relative orbit speed
+        totalMass: 0.001, // Total mass of the belt relative to Earth (approximation for physics)
+        groupSize: 50     // Number of asteroids per simulated physics group
+    }
+];
+
 // --- Saturn Ring Config ---
 export const SATURN_RING_INNER_RADIUS_FACTOR = 1.2; // Relative to Saturn's radius
 export const SATURN_RING_OUTER_RADIUS_FACTOR = 2.2; // Relative to Saturn's radius
