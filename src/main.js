@@ -79,10 +79,15 @@ function setupLighting() {
     ambientLight = new THREE.AmbientLight(0xffffff, Config.AMBIENT_LIGHT_INTENSITY);
     scene.add(ambientLight);
 
-    // Use a PointLight for the Sun for more realistic falloff, positioned at the center
-    sunLight = new THREE.PointLight(0xffffff, Config.SUN_LIGHT_INTENSITY, 0, 1); // Color, Intensity, Distance (0=infinite), Decay (1=realistic)
-    sunLight.position.set(0, 0, 0); // Position light at the sun's center
+    // Revert back to DirectionalLight for debugging Earth lighting
+    sunLight = new THREE.DirectionalLight(0xffffff, Config.SUN_LIGHT_INTENSITY);
+    sunLight.position.set(
+        Config.SUN_LIGHT_POSITION.x,
+        Config.SUN_LIGHT_POSITION.y,
+        Config.SUN_LIGHT_POSITION.z
+    ).normalize(); // Ensure direction is normalized if needed by shader
     scene.add(sunLight);
+
 
     // Keep a directional light for consistent directionality if needed, maybe lower intensity
     // const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
@@ -149,8 +154,8 @@ function createSharedMaterials(textures) {
         specularMap: { value: textures.earthSpecularLow },
         uHeightMap: { value: textures.earthHeight },
         uNormalMap: { value: textures.earthNormalLow },
-        // Use point light position for sun direction in shader
-        sunDirection: { value: sunLight.position }, // Or calculate direction vector if needed
+        // Use directional light's position (treated as direction)
+        sunDirection: { value: sunLight.position },
         uTime: { value: 0.0 },
         uDisplacementScale: { value: Config.EARTH_DISPLACEMENT_SCALE },
         uCameraPosition: { value: camera.position },

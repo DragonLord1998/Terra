@@ -35,8 +35,8 @@ export const EARTH_VERTEX_SHADER = `
     // Calculate final world normal after displacement (approximation)
     // We use the TBN matrix derived from the *original* geometry for transforming the normal map sample
     // The lighting normal should ideally account for displacement, but this is complex.
-    // Using the displaced normal directly for lighting:
-    vWorldNormal = normalize( normalMatrix * (normal * (1.0 + displacement * uDisplacementScale)) );
+    // Using the standard normal for lighting calculation (ignoring displacement for now):
+    vWorldNormal = normalize( normalMatrix * normal );
 
     gl_Position = projectionMatrix * modelViewMatrix * vec4(displacedPosition, 1.0);
   }
@@ -179,7 +179,7 @@ export const EARTH_FRAGMENT_SHADER = `
   uniform sampler2D dayTexture;
   uniform sampler2D nightTexture;
   uniform sampler2D specularMap; // Water mask
-  uniform vec3 sunDirection;
+  uniform vec3 sunDirection; // Restored for DirectionalLight
   uniform float uTime; // Time uniform for animation
   uniform vec3 uCameraPosition; // Need camera position if using view-dependent effects
   uniform sampler2D uNormalMap; // Add normal map uniform
@@ -208,35 +208,38 @@ export const EARTH_FRAGMENT_SHADER = `
     // Mix between geometry normal (vWorldNormal) and mapped normal based on the toggle uniform
     vec3 finalNormal = normalize(mix(vWorldNormal, mappedNormal, uNormalMappingEnabled));
 
-    // 3. Calculate Land Color (Day/Night Blend) using Final Normal
+    // 3. Calculate Light Direction (Use uniform for DirectionalLight)
     vec3 normalizedSunDir = normalize(sunDirection);
-    float landIntensity = max(0.0, dot(finalNormal, normalizedSunDir)); // Use normal map normal for lighting
+
+    // 4. Calculate Land Color (Day/Night Blend) using Final Normal & Light Direction
+    float landIntensity = max(0.0, dot(finalNormal, normalizedSunDir));
     vec3 landBlendedColor = mix(nightColor.rgb * uNightBlendFactor, dayColor.rgb, landIntensity);
 
-    // 4. Calculate Animated Water Color using Normal Map
+    // 5. Calculate Animated Water Color using Normal Map & Light Direction
     vec2 waveUv = vUv * 5.0 + uTime * 0.15; // Faster wave animation
     float waveNoise = fbm(waveUv);
     // Perturb the normal map normal for waves
-    vec3 perturbedFinalNormal = normalize(finalNormal + vec3(waveNoise * 0.1, waveNoise * 0.1, 0.0));
-    float waterDiffuse = max(0.0, dot(perturbedFinalNormal, normalizedSunDir)); // Use perturbed normal map normal for lighting
+    vec3 perturbedFinalNormal = normalize(finalNormal + vec3(waveNoise * 0.1, waveNoise * 0.1, 0.0)); // Use finalNormal
+    float waterDiffuse = max(0.0, dot(perturbedFinalNormal, normalizedSunDir)); // Use perturbed normal for water lighting
     // Add some basic specular for water - requires cameraPosition, approximate for now
     // vec3 viewDirection = normalize(uCameraPosition - vWorldPosition); // Use actual camera position
-    // vec3 reflectDirection = reflect(-normalizedSunDir, perturbedFinalNormal);
+    // vec3 reflectDirection = reflect(-normalizedSunDir, perturbedFinalNormal); // Use sun direction
     // float waterSpecular = pow(max(dot(viewDirection, reflectDirection), 0.0), 16.0); // Basic specular
     float waterSpecular = 0.0; // Placeholder for specular
     vec3 baseWaterColor = vec3(0.05, 0.2, 0.4);
     vec3 animatedWaterColor = baseWaterColor * (waterDiffuse * 0.8 + 0.2) + vec3(waterSpecular * 0.3); // Combine diffuse, ambient, specular
 
-    // 5. Blend Land and Water based on Mask
+    // 6. Blend Land and Water based on Mask
     vec3 finalBlendedColor = mix(landBlendedColor, animatedWaterColor, waterMask);
 
-    // 6. Apply overall lighting using the final normal
+    // 7. Apply overall lighting using the final normal & Light Direction
     float diffuseIntensity = max(0.0, dot(finalNormal, normalizedSunDir));
     // Reduce direct light contribution slightly when normal mapping is on to avoid washout
     float directMultiplier = mix(uDirectFactorBase, uDirectFactorNormalMap, uNormalMappingEnabled);
     float ambientTerm = mix(uAmbientFactorBase, uAmbientFactorNormalMap, uNormalMappingEnabled);
     float diffuse = diffuseIntensity * directMultiplier + ambientTerm;
 
+    // Apply lighting to the final blended color
     gl_FragColor = vec4(finalBlendedColor * diffuse, 1.0);
   }
 `;

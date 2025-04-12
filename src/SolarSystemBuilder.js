@@ -72,8 +72,8 @@ class SolarSystemBuilder {
 
         // Earth
         const earthGeometry = Factory.createSphereGeometry(Config.EARTH_RADIUS);
-        earthGeometry.computeTangents();
-        this.earthMesh = Factory.createMesh(earthGeometry, this.materials.earthMaterial);
+        earthGeometry.computeTangents(); // Needed for custom shader TBN calculation
+        this.earthMesh = Factory.createMesh(earthGeometry, this.materials.earthMaterial); // Restore custom material
         this.earthSystemAnchor.add(this.earthMesh);
 
         // Clouds

@@ -72,7 +72,7 @@ export const CONTROLS_MAX_DISTANCE = 5000; // Match far plane
 // --- Light Config ---
 export const SUN_LIGHT_INTENSITY = 3.0;
 export const SUN_LIGHT_POSITION = { x: 5, y: 3, z: 5 }; // Keep original offset for lighting direction
-export const AMBIENT_LIGHT_INTENSITY = 0.1;
+export const AMBIENT_LIGHT_INTENSITY = 0.5; // Increased ambient light significantly
 
 // --- Earth Shader Config ---
 export const EARTH_NORMAL_MAP_TOGGLE_DEFAULT = false; // Start with normal mapping off
