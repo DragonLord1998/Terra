@@ -22,11 +22,16 @@ let earthMaterial, sunGlowMaterial, atmosphereMaterial, sunMaterialBasic, sunMat
 let sunShaderEnabled = false;
 let cameraLockedToEarth = true;
 let normalMappingEnabled = Config.EARTH_NORMAL_MAP_TOGGLE_DEFAULT;
+let axialTiltEnabled = false; // New state for axial tilt
+let enhancedNightLightsEnabled = false; // New state for enhanced night lights
 
 // Helper variables
 const earthWorldPosition = new THREE.Vector3();
 let targetIndicator; // For visualizing the camera target
 let textures = {}; // Declare textures in a higher scope
+
+// --- Constants ---
+const EARTH_AXIAL_TILT = THREE.MathUtils.degToRad(23.5); // Earth's axial tilt
 
 // --- Initialization ---
 
@@ -50,6 +55,7 @@ async function init() {
 
         createTargetIndicator(); // Create the indicator after the scene is built
         setupEventListeners(); // Setup UI listeners after builder is ready
+        updateEarthTilt(); // Set initial tilt state
         animate(); // Start the animation loop
     } catch (error) {
         console.error("Initialization failed:", error);
@@ -167,7 +173,8 @@ function createSharedMaterials(textures) {
         uAmbientFactorBase: { value: Config.EARTH_SHADER_AMBIENT_FACTOR_BASE },
         uAmbientFactorNormalMap: { value: Config.EARTH_SHADER_AMBIENT_FACTOR_NORMAL_MAP },
         uDirectFactorBase: { value: Config.EARTH_SHADER_DIRECT_FACTOR_BASE },
-        uDirectFactorNormalMap: { value: Config.EARTH_SHADER_DIRECT_FACTOR_NORMAL_MAP }
+        uDirectFactorNormalMap: { value: Config.EARTH_SHADER_DIRECT_FACTOR_NORMAL_MAP },
+        uEnableEnhancedNightLights: { value: enhancedNightLightsEnabled ? 1.0 : 0.0 } // New uniform
     };
     earthMaterial = Factory.createEarthMaterial(Shaders, earthUniforms);
 
@@ -221,6 +228,8 @@ function setupEventListeners() {
     const gravityBtn = document.getElementById('toggle-gravity-btn');
     const focusBtn = document.getElementById('toggle-focus-btn');
     const sunShaderBtn = document.getElementById('toggle-sun-shader-btn');
+    const tiltBtn = document.getElementById('toggle-tilt-btn'); // New tilt button
+    const nightLightsBtn = document.getElementById('toggle-night-lights-btn'); // New night lights button
     const asteroidSlider = document.getElementById('asteroid-group-slider'); // Get slider
     const asteroidLabel = document.getElementById('asteroid-group-label'); // Get label
 
@@ -271,6 +280,37 @@ function setupEventListeners() {
         });
     } else { console.error("Sun shader toggle button not found!"); }
 
+    // --- New Tilt Button Listener ---
+    if (tiltBtn) {
+        tiltBtn.textContent = `Axial Tilt: ${axialTiltEnabled ? 'On' : 'Off'}`;
+        tiltBtn.addEventListener('click', () => {
+            axialTiltEnabled = !axialTiltEnabled;
+            tiltBtn.textContent = `Axial Tilt: ${axialTiltEnabled ? 'On' : 'Off'}`;
+            updateEarthTilt(); // Call function to apply the tilt
+            if (Config.DEBUG_MODE) {
+                console.log(`Axial Tilt ${axialTiltEnabled ? 'Enabled' : 'Disabled'}`);
+            }
+        });
+    } else { console.error("Tilt toggle button not found!"); }
+
+    // --- New Night Lights Button Listener ---
+    if (nightLightsBtn) {
+        nightLightsBtn.textContent = `Night Lights: ${enhancedNightLightsEnabled ? 'Enhanced' : 'Normal'}`;
+        nightLightsBtn.addEventListener('click', () => {
+            enhancedNightLightsEnabled = !enhancedNightLightsEnabled;
+            nightLightsBtn.textContent = `Night Lights: ${enhancedNightLightsEnabled ? 'Enhanced' : 'Normal'}`;
+            // Update the shader uniform directly
+            if (earthMaterial) {
+                earthMaterial.uniforms.uEnableEnhancedNightLights.value = enhancedNightLightsEnabled ? 1.0 : 0.0;
+            }
+            if (Config.DEBUG_MODE) {
+                console.log(`Enhanced Night Lights ${enhancedNightLightsEnabled ? 'Enabled' : 'Disabled'}`);
+                console.log(`Shader uniform uEnableEnhancedNightLights set to: ${enhancedNightLightsEnabled ? 1.0 : 0.0}`);
+            }
+        });
+    } else { console.error("Night lights toggle button not found!"); }
+
+
     // --- Asteroid Slider Listener ---
     if (asteroidSlider && asteroidLabel) {
         // Set initial label value based on config (assuming one belt for now)
@@ -298,6 +338,24 @@ function setupEventListeners() {
         console.error("Asteroid slider or label not found!");
     }
 }
+
+// --- Helper Functions ---
+
+function updateEarthTilt() {
+    const earthSystemAnchor = solarSystemBuilder?.getEarthSystemAnchor(); // Use optional chaining
+    if (earthSystemAnchor) {
+        earthSystemAnchor.rotation.x = axialTiltEnabled ? EARTH_AXIAL_TILT : 0;
+        if (Config.DEBUG_MODE) {
+            console.log(`Applied Earth tilt: ${axialTiltEnabled ? THREE.MathUtils.radToDeg(EARTH_AXIAL_TILT).toFixed(1) : 0} degrees`);
+        }
+    } else if (Config.DEBUG_MODE) {
+        // Log only if the builder should exist but the anchor doesn't
+        if (solarSystemBuilder) {
+            console.warn("updateEarthTilt called, but earthSystemAnchor not found yet.");
+        }
+    }
+}
+
 
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;

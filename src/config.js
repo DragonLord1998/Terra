@@ -1,5 +1,8 @@
 // src/config.js
 
+// --- Debug Flag ---
+export const DEBUG_MODE = true; // Set to false to disable console logs
+
 // --- Constants ---
 export const EARTH_RADIUS = 1; // Base unit
 export const SUN_RADIUS = 25; // Increased visual size
@@ -72,7 +75,7 @@ export const CONTROLS_MAX_DISTANCE = 5000; // Match far plane
 // --- Light Config ---
 export const SUN_LIGHT_INTENSITY = 3.0;
 export const SUN_LIGHT_POSITION = { x: 5, y: 3, z: 5 }; // Keep original offset for lighting direction
-export const AMBIENT_LIGHT_INTENSITY = 0.5; // Increased ambient light significantly
+export const AMBIENT_LIGHT_INTENSITY = 0.1; // Reduced ambient light significantly
 
 // --- Earth Shader Config ---
 export const EARTH_NORMAL_MAP_TOGGLE_DEFAULT = false; // Start with normal mapping off
@@ -80,7 +83,7 @@ export const EARTH_SHADER_AMBIENT_FACTOR_BASE = 0.3;
 export const EARTH_SHADER_AMBIENT_FACTOR_NORMAL_MAP = 0.25;
 export const EARTH_SHADER_DIRECT_FACTOR_BASE = 0.7;
 export const EARTH_SHADER_DIRECT_FACTOR_NORMAL_MAP = 0.6;
-export const EARTH_NIGHT_BLEND_FACTOR = 0.3;
+export const EARTH_NIGHT_BLEND_FACTOR = 1.0; // Increased blend factor
 
 // --- Glow Shader Config ---
 export const EARTH_ATMOSPHERE_COLOR = { r: 0.3, g: 0.6, b: 1.0 };

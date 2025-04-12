@@ -202,6 +202,7 @@ export const EARTH_FRAGMENT_SHADER = `
   uniform float uAmbientFactorNormalMap;
   uniform float uDirectFactorBase;
   uniform float uDirectFactorNormalMap;
+  uniform float uEnableEnhancedNightLights; // New uniform (0.0 = off, 1.0 = on)
 
 
   varying vec2 vUv;
@@ -226,7 +227,24 @@ export const EARTH_FRAGMENT_SHADER = `
 
     // 4. Calculate Land Color (Day/Night Blend) using Final Normal & Light Direction
     float landIntensity = max(0.0, dot(finalNormal, normalizedSunDir));
-    vec3 landBlendedColor = mix(nightColor.rgb * uNightBlendFactor, dayColor.rgb, landIntensity);
+
+    // --- Enhanced Night Lights Logic ---
+    vec3 nightColorSample = nightColor.rgb;
+    // Calculate how much night it is (0 = full day, 1 = full night)
+    float nightIntensity = 1.0 - smoothstep(0.0, 0.15, landIntensity); // Sharper transition
+
+    if (uEnableEnhancedNightLights > 0.5) {
+        // Example: Increase brightness based on texture and add slight emissiveness
+        float baseBrightness = nightColorSample.r + nightColorSample.g + nightColorSample.b; // Simple brightness check
+        // Boost brighter spots more in darkness, scale by nightIntensity
+        nightColorSample += nightColorSample * 1.5 * nightIntensity * smoothstep(0.1, 0.5, baseBrightness);
+        // Add a subtle glow based on brightness, scale by nightIntensity
+        nightColorSample += vec3(0.02, 0.02, 0.01) * nightIntensity * baseBrightness;
+    }
+    // --- End Enhanced Night Lights ---
+
+    vec3 landBlendedColor = mix(nightColorSample * uNightBlendFactor, dayColor.rgb, landIntensity);
+
 
     // 5. Calculate Animated Water Color using Normal Map & Light Direction
     vec2 waveUv = vUv * 5.0 + uTime * 0.15; // Faster wave animation
@@ -242,18 +260,32 @@ export const EARTH_FRAGMENT_SHADER = `
     vec3 baseWaterColor = vec3(0.05, 0.2, 0.4);
     vec3 animatedWaterColor = baseWaterColor * (waterDiffuse * 0.8 + 0.2) + vec3(waterSpecular * 0.3); // Combine diffuse, ambient, specular
 
-    // 6. Blend Land and Water based on Mask
-    vec3 finalBlendedColor = mix(landBlendedColor, animatedWaterColor, waterMask);
-
-    // 7. Apply overall lighting using the final normal & Light Direction
+    // 6. Calculate Lighting Factor (Reduce ambient term slightly overall)
     float diffuseIntensity = max(0.0, dot(finalNormal, normalizedSunDir));
-    // Reduce direct light contribution slightly when normal mapping is on to avoid washout
     float directMultiplier = mix(uDirectFactorBase, uDirectFactorNormalMap, uNormalMappingEnabled);
-    float ambientTerm = mix(uAmbientFactorBase, uAmbientFactorNormalMap, uNormalMappingEnabled);
-    float diffuse = diffuseIntensity * directMultiplier + ambientTerm;
+    float ambientTerm = mix(uAmbientFactorBase, uAmbientFactorNormalMap, uNormalMappingEnabled) * 0.8; // Reduced ambient term
+    float diffuse = diffuseIntensity * directMultiplier + ambientTerm; // Overall lighting factor
 
-    // Apply lighting to the final blended color
-    gl_FragColor = vec4(finalBlendedColor * diffuse, 1.0);
+    // 7. Calculate Lit Day Color (Land/Water Blend * Lighting)
+    vec3 dayLandColor = dayColor.rgb;
+    vec3 dayWaterColor = animatedWaterColor; // Use the calculated water color
+    vec3 dayBlendedColor = mix(dayLandColor, dayWaterColor, waterMask);
+    vec3 finalDayLitColor = dayBlendedColor * diffuse; // Apply full lighting
+
+    // 8. Calculate Final Night Color (Land/Water Blend, minimal/no lighting)
+    vec3 nightLandColor = nightColorSample * uNightBlendFactor; // nightColorSample includes enhancement if enabled
+    // Use a very dark base for night water, almost black
+    vec3 nightWaterColor = baseWaterColor * 0.05; // Very dark night water
+    vec3 finalNightColor = mix(nightLandColor, nightWaterColor, waterMask);
+
+    // 9. Blend Final Day and Night based purely on Sun Angle
+    vec3 finalColor = mix(finalNightColor, finalDayLitColor, landIntensity);
+
+    // --- DEBUG: Output landIntensity directly ---
+    // gl_FragColor = vec4(vec3(landIntensity), 1.0);
+    // --- END DEBUG ---
+
+    gl_FragColor = vec4(finalColor, 1.0);
   }
 `;
 
