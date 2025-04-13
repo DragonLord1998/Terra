@@ -472,6 +472,9 @@ function onUIPanelClick(event) {
 
 // --- Animation Loop ---
 function animate() {
+    if (!renderer) {
+        return; // Exit early if the renderer is not yet defined
+    }
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
 
