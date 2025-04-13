@@ -1,6 +1,6 @@
 // src/main.js
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import * as THREE from 'three'; // Restored import
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js'; // Restored import
 import * as Config from './config.js';
 import * as Shaders from './shaders.js';
 import * as Factory from './celestialFactory.js';
@@ -85,8 +85,8 @@ function setupBaseScene() {
 }
 
 function setupLighting() {
-    ambientLight = new THREE.AmbientLight(0xffffff, Config.AMBIENT_LIGHT_INTENSITY);
-    scene.add(ambientLight);
+    ambientLight = new THREE.AmbientLight(0xffffff, Config.AMBIENT_LIGHT_INTENSITY); // Restored global ambient light
+    scene.add(ambientLight); // Restored global ambient light
 
     // Revert back to DirectionalLight for debugging Earth lighting
     sunLight = new THREE.DirectionalLight(0xffffff, Config.SUN_LIGHT_INTENSITY);
@@ -156,27 +156,18 @@ async function loadTextures() {
 }
 
 function createSharedMaterials(textures) {
-    // Earth Material
-    const earthUniforms = {
-        dayTexture: { value: textures.earthDayLow },
-        nightTexture: { value: textures.earthNightLow },
-        specularMap: { value: textures.earthSpecularLow },
-        uHeightMap: { value: textures.earthHeight },
-        uNormalMap: { value: textures.earthNormalLow },
-        // Use directional light's position (treated as direction)
-        sunDirection: { value: sunLight.position },
-        uTime: { value: 0.0 },
-        uDisplacementScale: { value: Config.EARTH_DISPLACEMENT_SCALE },
-        uCameraPosition: { value: camera.position },
-        uNormalMappingEnabled: { value: normalMappingEnabled ? 1.0 : 0.0 },
-        uNightBlendFactor: { value: Config.EARTH_NIGHT_BLEND_FACTOR },
-        uAmbientFactorBase: { value: Config.EARTH_SHADER_AMBIENT_FACTOR_BASE },
-        uAmbientFactorNormalMap: { value: Config.EARTH_SHADER_AMBIENT_FACTOR_NORMAL_MAP },
-        uDirectFactorBase: { value: Config.EARTH_SHADER_DIRECT_FACTOR_BASE },
-        uDirectFactorNormalMap: { value: Config.EARTH_SHADER_DIRECT_FACTOR_NORMAL_MAP },
-        uEnableEnhancedNightLights: { value: enhancedNightLightsEnabled ? 1.0 : 0.0 } // New uniform
-    };
-    earthMaterial = Factory.createEarthMaterial(Shaders, earthUniforms);
+    // Earth Material - Reverted to MeshStandardMaterial
+    earthMaterial = Factory.createStandardMaterial(textures.earthDayLow, { // Use day texture as base map
+        normalMap: textures.earthNormalLow,
+        // normalScale: new THREE.Vector2(Config.EARTH_NORMAL_MAP_SCALE, Config.EARTH_NORMAL_MAP_SCALE), // If scale needed
+        roughnessMap: textures.earthSpecularLow, // Use specular as roughness map
+        roughness: 1.0, // Base roughness
+        metalness: 0.1, // Mostly non-metallic
+        emissiveMap: textures.earthNightLow,
+        emissive: 0xffffff, // Use white to show emissive map colors
+        emissiveIntensity: 1.0 // Adjust intensity as needed
+    });
+    // Note: Removed the old earthUniforms object and Factory.createEarthMaterial call
 
     // Sun Glow Material
     const sunGlowUniforms = {
@@ -429,10 +420,7 @@ function animate() {
     }
 
     // --- Update Shader Uniforms ---
-    earthMaterial.uniforms.uTime.value = elapsedTime;
-    earthMaterial.uniforms.uCameraPosition.value.copy(camera.position);
-    // Update sun direction based on point light position (it's fixed at origin)
-    // earthMaterial.uniforms.sunDirection.value.copy(sunLight.position); // Already set?
+    // earthMaterial uniforms removed as it's now MeshStandardMaterial
     sunGlowMaterial.uniforms.uCameraPosition.value.copy(camera.position);
     sunGlowMaterial.uniforms.uTime.value = elapsedTime; // Add time update for glow noise
     atmosphereMaterial.uniforms.uCameraPosition.value.copy(camera.position);
@@ -443,28 +431,32 @@ function animate() {
 
     // --- LOD Check (Earth only for now) ---
     // Access the higher-scoped textures variable
-    if (earthMesh && cloudMesh && textures.earthDayHigh) {
+    if (earthMesh && cloudMesh && textures.earthDayHigh && earthMaterial instanceof THREE.MeshStandardMaterial) { // Check material type
         const currentDistance = controls.getDistance(); // Or distance to Earth specifically
-        const isHighRes = (earthMaterial.uniforms.dayTexture.value === textures.earthDayHigh);
+        const isHighRes = (earthMaterial.map === textures.earthDayHigh); // Check base map
         let needsEarthMaterialUpdate = false;
 
         if (currentDistance < Config.LOD_ZOOM_THRESHOLD && !isHighRes) {
-            earthMaterial.uniforms.dayTexture.value = textures.earthDayHigh;
-            earthMaterial.uniforms.nightTexture.value = textures.earthNightHigh;
-            earthMaterial.uniforms.specularMap.value = textures.earthSpecularHigh;
-            earthMaterial.uniforms.uNormalMap.value = textures.earthNormalHigh;
+            earthMaterial.map = textures.earthDayHigh;
+            earthMaterial.normalMap = textures.earthNormalHigh;
+            earthMaterial.roughnessMap = textures.earthSpecularHigh; // Assuming specular map used for roughness
+            earthMaterial.emissiveMap = textures.earthNightHigh;
             if (cloudMesh.material) cloudMesh.material.map = textures.earthCloudsHigh;
             needsEarthMaterialUpdate = true;
         } else if (currentDistance >= Config.LOD_ZOOM_THRESHOLD && isHighRes) {
-            earthMaterial.uniforms.dayTexture.value = textures.earthDayLow;
-            earthMaterial.uniforms.nightTexture.value = textures.earthNightLow;
-            earthMaterial.uniforms.specularMap.value = textures.earthSpecularLow;
-            earthMaterial.uniforms.uNormalMap.value = textures.earthNormalLow;
+            earthMaterial.map = textures.earthDayLow;
+            earthMaterial.normalMap = textures.earthNormalLow;
+            earthMaterial.roughnessMap = textures.earthSpecularLow; // Assuming specular map used for roughness
+            earthMaterial.emissiveMap = textures.earthNightLow;
             if (cloudMesh.material) cloudMesh.material.map = textures.earthCloudsLow;
             needsEarthMaterialUpdate = true;
         }
-        if (needsEarthMaterialUpdate && cloudMesh.material) {
-            cloudMesh.material.needsUpdate = true;
+
+        if (needsEarthMaterialUpdate) {
+             earthMaterial.needsUpdate = true; // Flag material for update
+             if (cloudMesh.material) {
+                 cloudMesh.material.needsUpdate = true;
+             }
         }
     }
 

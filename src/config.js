@@ -12,7 +12,7 @@ export const MOON_ORBIT_RADIUS = 2.5; // Moon distance from Earth
 export const CLOUD_ALTITUDE_FACTOR = 1.02; // Cloud layer height relative to Earth radius
 export const ATMOSPHERE_ALTITUDE_FACTOR = 1.04; // Atmosphere height relative to Earth radius
 export const LOD_ZOOM_THRESHOLD = 2.5; // Camera distance to switch Earth textures
-export const EARTH_DISPLACEMENT_SCALE = 0.02; // How much height map affects geometry
+export const EARTH_DISPLACEMENT_SCALE = 0.1; // How much height map affects geometry
 export const EARTH_ORBIT_RADIUS = 100; // Earth's distance from Sun (Increased)
 export const EARTH_ORBIT_SPEED = 1.0; // Base orbit speed (Keep this as 1, SOLAR_SYSTEM_ORBIT_SPEED_FACTOR controls overall speed)
 export const MOON_ORBIT_SPEED = 0.05; // Moon orbit speed around Earth (Slowed down x10)
@@ -78,7 +78,7 @@ export const SUN_LIGHT_POSITION = { x: 5, y: 3, z: 5 }; // Keep original offset 
 export const AMBIENT_LIGHT_INTENSITY = 0.1; // Reduced ambient light significantly
 
 // --- Earth Shader Config ---
-export const EARTH_NORMAL_MAP_TOGGLE_DEFAULT = false; // Start with normal mapping off
+export const EARTH_NORMAL_MAP_TOGGLE_DEFAULT = true; // Start with normal mapping on
 export const EARTH_SHADER_AMBIENT_FACTOR_BASE = 0.3;
 export const EARTH_SHADER_AMBIENT_FACTOR_NORMAL_MAP = 0.25;
 export const EARTH_SHADER_DIRECT_FACTOR_BASE = 0.7;

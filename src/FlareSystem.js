@@ -1,5 +1,5 @@
 // src/FlareSystem.js
-import * as THREE from 'three';
+import * as THREE from 'three'; // Restored import
 
 class FlareParticle {
     constructor(mesh) {

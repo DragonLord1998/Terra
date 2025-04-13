@@ -3,10 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three.js Sphere</title>
+    <title>Three.js Solar System</title>
     <style>
-        body { margin: 0; }
-        canvas { display: block; }
+        html, body {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none; /* Prevent touch scrolling */
+        }
         #ui-controls {
             position: fixed;
             bottom: 10px;
@@ -45,8 +55,18 @@
             margin-bottom: 5px;
         }
     </style>
+    <!-- Import Map for Three.js Modules from CDN -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/"
+        }
+    }
+    </script>
 </head>
 <body>
+    <canvas id="renderCanvas"></canvas>
     <div id="ui-controls">
         <button id="toggle-gravity-btn">Gravity: Off</button>
         <button id="toggle-focus-btn">Focus: Earth</button>
@@ -56,14 +76,7 @@
         <label id="asteroid-group-label" for="asteroid-group-slider">Asteroid Group Size: 50</label>
         <input type="range" id="asteroid-group-slider" name="asteroid-group-slider" min="10" max="500" step="10" value="50">
     </div>
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.163.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.163.0/examples/jsm/"
-            }
-        }
-    </script>
-    <script type="module" src="src/main.js"></script>
+    <!-- Main application script -->
+    <script type="module" src="src/main.js"></script> <!-- Set back to type="module" -->
 </body>
 </html>

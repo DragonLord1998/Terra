@@ -266,23 +266,30 @@ export const EARTH_FRAGMENT_SHADER = `
     float ambientTerm = mix(uAmbientFactorBase, uAmbientFactorNormalMap, uNormalMappingEnabled) * 0.8; // Reduced ambient term
     float diffuse = diffuseIntensity * directMultiplier + ambientTerm; // Overall lighting factor
 
-    // 7. Calculate Lit Day Color (Land/Water Blend * Lighting)
-    vec3 dayLandColor = dayColor.rgb;
-    vec3 dayWaterColor = animatedWaterColor; // Use the calculated water color
-    vec3 dayBlendedColor = mix(dayLandColor, dayWaterColor, waterMask);
-    vec3 finalDayLitColor = dayBlendedColor * diffuse; // Apply full lighting
+    // 7. Select Base Texture based on Sun Angle
+    vec3 nightTex = nightColorSample * uNightBlendFactor; // Use enhanced night color
+    vec3 dayTex = dayColor.rgb;
+    // Use smoothstep for a slightly softer transition between day/night textures
+    vec3 baseTextureColor = mix(nightTex, dayTex, smoothstep(0.0, 0.1, landIntensity));
 
-    // 8. Calculate Final Night Color (Land/Water Blend, minimal/no lighting)
-    vec3 nightLandColor = nightColorSample * uNightBlendFactor; // nightColorSample includes enhancement if enabled
-    // Use a very dark base for night water, almost black
-    vec3 nightWaterColor = baseWaterColor * 0.05; // Very dark night water
-    vec3 finalNightColor = mix(nightLandColor, nightWaterColor, waterMask);
+    // 8. Blend Base Land/Water Texture
+    vec3 blendedBaseColor = mix(baseTextureColor, animatedWaterColor, waterMask);
 
-    // 9. Blend Final Day and Night based purely on Sun Angle
-    vec3 finalColor = mix(finalNightColor, finalDayLitColor, landIntensity);
+    // 9. Calculate Lighting Components
+    float diffuseIntensity = max(0.0, dot(finalNormal, normalizedSunDir));
+    float directMultiplier = mix(uDirectFactorBase, uDirectFactorNormalMap, uNormalMappingEnabled);
+    // Reintroduce ambient reduction, maybe slightly less than before
+    float ambientTerm = mix(uAmbientFactorBase, uAmbientFactorNormalMap, uNormalMappingEnabled) * 0.7; // e.g., 0.7 instead of 0.8 or 1.0
 
-    // --- DEBUG: Output landIntensity directly ---
-    // gl_FragColor = vec4(vec3(landIntensity), 1.0);
+    // 10. Calculate Combined Lighting Factor
+    float combinedLight = ambientTerm + (diffuseIntensity * directMultiplier);
+
+    // 11. Apply Combined Lighting and Clamp
+    vec3 litColor = blendedBaseColor * combinedLight;
+    vec3 finalColor = clamp(litColor, 0.0, 1.0); // Clamp to prevent over-brightening
+
+    // --- DEBUG ---
+    // gl_FragColor = vec4(vec3(combinedLight), 1.0); // Debug combined light factor
     // --- END DEBUG ---
 
     gl_FragColor = vec4(finalColor, 1.0);

@@ -1,5 +1,5 @@
 // src/SolarSystemBuilder.js
-import * as THREE from 'three';
+import * as THREE from 'three'; // Restored import
 import * as Config from './config.js';
 import * as Factory from './celestialFactory.js';
 
@@ -71,7 +71,7 @@ class SolarSystemBuilder {
 
 
         // Earth
-        const earthGeometry = Factory.createSphereGeometry(Config.EARTH_RADIUS);
+        const earthGeometry = Factory.createSphereGeometry(Config.EARTH_RADIUS, 512, 512); // Increased segments further
         earthGeometry.computeTangents(); // Needed for custom shader TBN calculation
         this.earthMesh = Factory.createMesh(earthGeometry, this.materials.earthMaterial); // Restore custom material
         this.earthSystemAnchor.add(this.earthMesh);

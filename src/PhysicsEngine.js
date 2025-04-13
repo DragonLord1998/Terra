@@ -1,5 +1,5 @@
 // src/PhysicsEngine.js
-import * as THREE from 'three';
+import * as THREE from 'three'; // Restored import
 import * as Config from './config.js'; // Assuming config holds constants like GRAVITATIONAL_CONSTANT
 
 class PhysicsEngine {

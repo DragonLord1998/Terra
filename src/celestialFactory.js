@@ -1,5 +1,5 @@
 // src/celestialFactory.js
-import * as THREE from 'three';
+import * as THREE from 'three'; // Restored import
 
 /**
  * Creates and adds an empty Object3D to the scene to serve as an orbit anchor.
