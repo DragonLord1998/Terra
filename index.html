@@ -3,78 +3,156 @@
 <head>
     <meta charset="UTF-8">    
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Solar System Simulation</title> <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
-        canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-            cursor: pointer;
-            touch-action: none;
-         /* --- UI Styling --- */
-         .ui-container {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background-color: rgba(0, 0, 0, 0.6);
-            padding: 10px;
-            border-radius: 5px;
-            z-index: 100;
-            color: white;
-            max-width: 180px;
-         }
-         #choosePlanetBtn {
-             padding: 8px 15px; cursor: pointer; background-color: rgba(255, 255, 255, 0.2);
-             color: white; border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 5px;
-             margin-bottom: 5px;
-             width: 100%;
-             box-sizing: border-box;
-         }
-         #choosePlanetBtn:hover { background-color: rgba(255, 255, 255, 0.4); }
+    <title>Solar System Simulation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: black;
+            font-family: 'Roboto', sans-serif;
+        }
 
-         #planetListDropdown {
-            display: none;
-            background-color: rgba(0, 0, 0, 0.8);
-            border: 1px solid rgba(255, 255, 255, 0.4);
-            border-radius: 5px;
-            padding: 5px;
-            max-height: 300px;
-            overflow-y: auto;
-            margin-top: 5px;
-         }
-          #planetListDropdown button {
-            display: block; width: 100%; padding: 5px 10px; margin-bottom: 3px;
-            cursor: pointer; background-color: rgba(255, 255, 255, 0.1); color: white;
-            border: none; border-radius: 3px; text-align: left; font-size: 0.9em;
+        canvas {
+            display: block; width: 100%; height: 100%; cursor: pointer; touch-action: none;
+        }
+
+        /* --- UI Styling --- */
+        .hidden {
+             display: none !important;
+        }
+        .ui-container {
+            position: absolute; top: 10px; left: 10px;
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 10px; border-radius: 5px; z-index: 100;
+            color: #ddd; max-width: 180px;
+        }
+
+
+        #choosePlanetBtn {
+            padding: 8px 15px; cursor: pointer;
+            background-color: #2196F3; color: #fff;
+            border: none; border-radius: 4px;
+            margin-bottom: 5px; width: 100%;
             box-sizing: border-box;
          }
-         #planetListDropdown button:hover { background-color: rgba(255, 255, 255, 0.3); }
-         #planetListDropdown button:last-child { margin-bottom: 0; }
+        #choosePlanetBtn:hover {
+            background-color: #1976D2;            
+        }#planetListDropdown {
+            display: none; background-color: #eee;            
+            border-radius: 4px; padding: 0px;
+            max-height: 200px; overflow-y: auto;
+            margin-top: 5px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            box-sizing: border-box;
+            position: absolute;
+            left: 0px;
+            width: 100%;            
+            box-sizing: border-box;
+        }
 
-         #distanceControl {
-            display: none;
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid rgba(255, 255, 255, 0.2);
-         }
-         #distanceControl label { display: block; margin-bottom: 5px; font-size: 0.9em; }
-         #distanceSlider { width: 100%; cursor: pointer; box-sizing: border-box; }
-         #distanceValue { margin-left: 5px; font-size: 0.9em; }
+        #planetListDropdown button {
+            display: block; width: 100%; padding: 5px 10px;
+             cursor: pointer;
+            background-color: transparent; color: #333;
+            border: none; border-radius: 3px;
+            text-align: left; font-size: 0.9em;
+            box-sizing: border-box;            
+        }
+        #planetListDropdown button:hover {            
+            background-color: #e0e0e0;            
+        }#planetListDropdown button:last-child {            
+            margin-bottom: 0;            
+        }
 
-    </style>
-</head>
-<body>
-    <div class="ui-container">
+        #distanceControl {
+            display: none; margin-top: 10px; padding-top: 10px; box-sizing: border-box;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #distanceControl label {            
+            display: block; margin-bottom: 5px; font-size: 0.9em; color: #fff;
+        }
+
+        #distanceSlider {
+            width: 100%; cursor: pointer; box-sizing: border-box;
+            -webkit-appearance: none; /* Override default appearance */            
+             background: #ddd;            
+             outline: none; /* Remove outline */            
+        }        
+
+        #distanceSlider::-webkit-slider-thumb {            
+            -webkit-appearance: none; /* Override default appearance */
+            appearance: none; /* Modern browsers */
+            width: 12px; height: 12px; border-radius: 50%;
+            background: #2196F3; cursor: pointer;
+        }
+
+        #distanceValue {            
+            margin-left: 5px; font-size: 0.9em; color: #fff;            
+        }
+        /* --- Swirling Loading Animation --- */
+        .loading-animation-container {            
+            position: fixed;            
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);                        
+            width: 60px;
+            height: 60px;   
+
+            z-index: 200; /* Ensure it's on top */
+            display: flex;
+            justify-content: center;
+            align-items: center;            
+        }
+
+        .circle {            
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            position: absolute;
+            background-color: #fff;            
+            animation: orbit 2s linear infinite;
+            box-sizing: border-box;
+        }        
+        .circle:nth-child(1) {            
+            background-color: #4fc3f7; /* Light blue */            
+            animation-delay: -0.4s;
+            box-sizing: border-box;
+        }        
+        .circle:nth-child(2) {            
+            background-color: #ffeb3b; /* Yellow */            
+            animation-delay: -0.8s;
+            box-sizing: border-box;            
+        }        
+        .circle:nth-child(3) {            
+            background-color: #e91e63; /* Pink */            
+            animation-delay: -1.2s;
+            box-sizing: border-box;
+        }        
+
+
+        @keyframes orbit {
+            0% { transform: rotate(0deg) translateX(20px) rotate(0deg); opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { transform: rotate(360deg) translateX(20px) rotate(-360deg); opacity: 1; }
+        }
+
+
+    </style>        
+    <div class="ui-container hidden">
         <button id="choosePlanetBtn">Choose Planet</button>
-        <div id="planetListDropdown">
-            <button data-name="Background">Reset Focus</button>
-        </div>
+        <div id="planetListDropdown"></div>
         <div id="distanceControl">
             <label for="distanceSlider">Distance: <span id="distanceValue">N/A</span></label>
             <input type="range" id="distanceSlider" min="3" max="50" value="10" step="0.1">
         </div>
     </div>
-
+     <div class="loading-animation-container">
+        <div class="circle"></div>
+        <div class="circle"></div>
+        <div class="circle"></div>
+    </div>
     <canvas id="webgl-canvas"></canvas>
 
     <script type="importmap">

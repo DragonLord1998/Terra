@@ -3,6 +3,19 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // --- Global Variables ---
 let scene, camera, renderer, controls;
+let spaceship; // Declare spaceship globally
+let spaceshipSpeed = 0.1;
+let spaceshipRollSpeed = 0.05;
+let initialDistance = 80;
+
+// --- Spaceship Movement Flags ---
+let moveForward = false;
+let moveBackward = false;
+let moveLeft = false;
+let moveRight = false;
+let rollLeft = false;
+let rollRight = false;
+
 const textureLoader = new THREE.TextureLoader();
 const clock = new THREE.Clock();
 const planets = [];
@@ -15,7 +28,6 @@ const targetPositionVec = new THREE.Vector3();
 const cameraOffsetDir = new THREE.Vector3();
 let desiredDistance = 10.0;
 const desiredCameraPosition = new THREE.Vector3();
-let loadingSphere = null;
 const texturesMap = new Map(); // --- Store loaded textures ---
 let asteroidBelt; // Declare asteroid belt globally or within init scope
 let sunFlares = [];
@@ -208,6 +220,11 @@ function createPlanets(scene, texturesMap, clickableObjects, solarSystemData, mo
           button.textContent = moonData.name; button.dataset.name = moonData.name;
           dropdownContent.appendChild(button);
      }
+
+    // Add Spaceship button to dropdown
+    const spaceshipButton = document.createElement('button');
+    spaceshipButton.textContent = 'Spaceship'; spaceshipButton.dataset.name = 'Spaceship';
+    dropdownContent.appendChild(spaceshipButton);
     return planets;
 }
 
@@ -241,13 +258,6 @@ async function init() {
     scene.add(sunLight);
 
 
-    // --- Create and add Loading Sphere ---
-    const loadingGeo = new THREE.SphereGeometry(1, 32, 16);
-    const loadingMat = new THREE.MeshBasicMaterial({ color: 0x0077ff });
-    loadingSphere = new THREE.Mesh(loadingGeo, loadingMat);
-    scene.add(loadingSphere);
-    console.log("Loading indicator added.");
-
 
     // --- Load ALL Textures Upfront ---
     console.log("Starting texture loading...");
@@ -272,15 +282,29 @@ async function init() {
     }
     await Promise.all(textureLoadPromises);
     console.log("Texture loading finished.");
+
+    const loadingAnimation = document.querySelector('.loading-animation-container');
+    if (loadingAnimation) {
+        loadingAnimation.style.display = 'none';
+    }
+    // --- Show UI ---
+    
+    const spaceshipGeometry = new THREE.ConeGeometry(0.5, 2, 32);
+    const spaceshipMaterial = new THREE.MeshStandardMaterial({ color: 0x808080 });
+    spaceship = new THREE.Mesh(spaceshipGeometry, spaceshipMaterial);
+    spaceship.position.set(0, 0, 10); // Start near the sun
+    spaceship.rotation.x = -Math.PI / 2; // Point the ship forward
+    scene.add(spaceship);
+
+    
+    // --- Show UI ---
+    const uiContainer = document.querySelector('.ui-container');
+    uiContainer.classList.remove('hidden');
+    
+    
+
     // --- End Texture Loading ---
 
-
-    // --- Remove Loading Sphere ---
-    if (loadingSphere) {
-         console.log("Removing loading indicator.");
-         scene.remove(loadingSphere);
-         loadingSphere.geometry.dispose(); loadingSphere.material.dispose(); loadingSphere = null;
-    }
 
     // --- Create Starfield Background ---
     const starfieldTexture = texturesMap.get('starfield');
@@ -408,6 +432,54 @@ async function init() {
     window.addEventListener('resize', onWindowResize);
 }
 
+
+// --- Spaceship Controls ---
+document.addEventListener('keydown', (event) => {
+    switch (event.key) {
+        case 'w':
+            moveForward = true;
+            break;
+        case 's':
+            moveBackward = true;
+            break;
+        case 'a':
+            moveLeft = true;
+            break;
+        case 'd':
+            moveRight = true;
+            break;
+        case 'q':
+            rollLeft = true;
+            break;
+        case 'e':
+            rollRight = true;
+            break;
+    }
+});
+
+document.addEventListener('keyup', (event) => {
+    switch (event.key) {
+        case 'w':
+            moveForward = false;
+            break;
+        case 's':
+            moveBackward = false;
+            break;
+        case 'a':
+            moveLeft = false;
+            break;
+        case 'd':
+            moveRight = false;
+            break;
+        case 'q':
+            rollLeft = false;
+            break;
+        case 'e':
+            rollRight = false;
+            break;
+    }
+});
+
 // --- Pointer Down Handler (Raycasting) ---
 function onPointerDownViaRaycast(event) {
     // Calculate mouse position in normalized device coordinates (-1 to +1)
@@ -454,6 +526,9 @@ function onUIPanelClick(event) {
              objectToFocus = scene.children.find(obj => obj.userData && obj.userData.name === 'Sun');
         } else if (planetName === 'Moon') {
             objectToFocus = moonMesh; // Use direct reference
+        } else if (planetName === 'Spaceship'){
+            objectToFocus = spaceship;
+
          } else {
             const foundPlanetData = planets.find(p => p.name === planetName);
             if (foundPlanetData) {
@@ -472,15 +547,9 @@ function onUIPanelClick(event) {
 
 // --- Animation Loop ---
 function animate() {
-    if (!renderer) {
-        return; // Exit early if the renderer is not yet defined
-    }
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
-
-    if (loadingSphere) {
-         loadingSphere.rotation.y += delta * 0.5; loadingSphere.rotation.x += delta * 0.3;
-    } else if (planets.length > 0) {
+    if (planets.length > 0) {
         planets.forEach(p => {
             if (p.pivot) {
                 p.pivot.rotation.y += p.orbitSpeed * delta * 10; // Orbit
@@ -515,19 +584,55 @@ function animate() {
             // Smooth camera movement (lerp)
             camera.position.lerp(desiredCameraPosition, 0.08); // Adjust lerp factor for speed
         } else {
-            // Keep controls target at 0,0,0 if nothing focused
-            controls.target.set(0,0,0);
-        }
+             //If no object is selected make the camera follow the spaceship
+            if (spaceship) { controls.target.copy(spaceship.position); }
+            if (spaceship) {
+                // Move spaceship forward/backward
+                const moveDir = new THREE.Vector3(0, 0, 1); // Use positive Z-axis as forward
+                moveDir.applyQuaternion(spaceship.quaternion); 
+                if (moveForward) {
+                   spaceship.position.add(moveDir.multiplyScalar(spaceshipSpeed)); // Move forward
+                }
+                if (moveBackward) {
+                    spaceship.position.sub(moveDir.multiplyScalar(spaceshipSpeed)); // Move backward
+                }
+                
+                // Rotate spaceship left/right (yaw)
+                const yawAxis = new THREE.Vector3(0, 1, 0); // Local Y-axis for yaw
+                if (moveLeft) {
+                    spaceship.rotateOnAxis(yawAxis, spaceshipRollSpeed); // Rotate on its Y-axis
+                }
+                if (moveRight) {
+                    spaceship.rotateOnAxis(yawAxis, -spaceshipRollSpeed);
+                }
+
+                // Strafe spaceship left/right
+                const strafeDir = new THREE.Vector3(1, 0, 0);
+                strafeDir.applyQuaternion(spaceship.quaternion);
+                if (moveLeft) {
+                    spaceship.position.sub(strafeDir.multiplyScalar(spaceshipSpeed));
+                }
+                if (moveRight) {
+                    spaceship.position.add(strafeDir.multiplyScalar(spaceshipSpeed));
+                }
+
+                // Roll spaceship left/right
+                const rollAxis = new THREE.Vector3(0, 0, 1);
+                if (rollLeft) {
+                    spaceship.rotateOnAxis(rollAxis, spaceshipRollSpeed);
+                } if (rollRight) { spaceship.rotateOnAxis(rollAxis, -spaceshipRollSpeed); }
+                }
+             }
     }
 
     if (controls) { controls.update(); }
     if (renderer && scene && camera) { renderer.render(scene, camera); }
 }
 
-// --- Start animation loop FIRST ---
-animate();
 // --- Then start async initialization ---
 
 document.addEventListener('DOMContentLoaded', () => {
-    init().catch(error => { console.error("Initialization failed:", error); });
+    init()
+      .then(() => animate()) // Start animation AFTER init() is done // Added missing parenthesis
+      .catch(error => { console.error("Initialization failed:", error); });
 });
