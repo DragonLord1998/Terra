@@ -1,486 +1,581 @@
-// src/main.js
-import * as THREE from 'three'; // Restored import
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js'; // Restored import
-import * as Config from './config.js';
-import * as Shaders from './shaders.js';
-import * as Factory from './celestialFactory.js';
-import PhysicsEngine from './PhysicsEngine.js';
-import SolarSystemBuilder from './SolarSystemBuilder.js';
-import FlareSystem from './FlareSystem.js'; // Import FlareSystem
+/**
+ * Main application file for the Solar System Simulation
+ */
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CelestialFactory } from './celestialFactory.js';
+import { SpaceshipFactory } from './spaceshipFactory.js';
+import { CameraController } from './cameraController.js';
+import { InputController } from './inputController.js';
+// Import shipSettings from config
+import { textureFiles, baseURL, shipSettings } from './config.js';
 
-// --- Global Variables ---
-let scene, camera, renderer, controls, clock, textureLoader;
-let sunLight, ambientLight;
-let physicsEngine;
-let solarSystemBuilder;
-let flareSystem; // Add flare system instance
+// --- Helper Function to Create Text Sprites ---
+function createTextSprite(text, options = {}) {
+    const {
+        fontsize = 48, // Larger font size for better texture quality
+        fontface = 'Arial',
+        textColor = { r: 255, g: 255, b: 255, a: 1.0 },
+        backgroundColor = { r: 0, g: 0, b: 0, a: 0.4 }, // Semi-transparent background
+        borderColor = { r: 150, g: 150, b: 150, a: 1.0 },
+        borderThickness = 3,
+        scale = 1.0 // Initial scale of the sprite
+    } = options;
 
-// Materials (created once, passed to builder)
-let earthMaterial, sunGlowMaterial, atmosphereMaterial, sunMaterialBasic, sunMaterialShader;
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    context.font = `Bold ${fontsize}px ${fontface}`;
 
-// State variables
-let sunShaderEnabled = false;
-let cameraLockedToEarth = true;
-let normalMappingEnabled = Config.EARTH_NORMAL_MAP_TOGGLE_DEFAULT;
-let axialTiltEnabled = false; // New state for axial tilt
-let enhancedNightLightsEnabled = false; // New state for enhanced night lights
+    // Measure text width
+    const metrics = context.measureText(text);
+    const textWidth = metrics.width;
 
-// Helper variables
-const earthWorldPosition = new THREE.Vector3();
-let targetIndicator; // For visualizing the camera target
-let textures = {}; // Declare textures in a higher scope
+    // Set canvas size with padding
+    canvas.width = textWidth + borderThickness * 2 + 20; // Add padding
+    canvas.height = fontsize * 1.4 + borderThickness * 2; // Adjust height based on font size
 
-// --- Constants ---
-const EARTH_AXIAL_TILT = THREE.MathUtils.degToRad(23.5); // Earth's axial tilt
+    // Re-apply font after resizing canvas
+    context.font = `Bold ${fontsize}px ${fontface}`;
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
 
-// --- Initialization ---
-
-async function init() {
-    setupBaseScene();
-    setupLighting();
-    setupControls();
-
-    physicsEngine = new PhysicsEngine(); // Instantiate physics engine
-    flareSystem = new FlareSystem(scene, 200); // Instantiate flare system (e.g., 200 particles)
-
-    try {
-        textures = await loadTextures(); // Assign to the higher-scoped variable
-        createSharedMaterials(textures); // Create materials needed by the builder
-
-        // Instantiate builder and build the scene
-        solarSystemBuilder = new SolarSystemBuilder(scene, textures, {
-            earthMaterial, sunGlowMaterial, atmosphereMaterial, sunMaterialBasic, sunMaterialShader
-        }, physicsEngine);
-        solarSystemBuilder.buildInitialScene();
-
-        createTargetIndicator(); // Create the indicator after the scene is built
-        setupEventListeners(); // Setup UI listeners after builder is ready
-        updateEarthTilt(); // Set initial tilt state
-        animate(); // Start the animation loop
-    } catch (error) {
-        console.error("Initialization failed:", error);
-    }
-}
-
-function setupBaseScene() {
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x101010);
-
-    camera = new THREE.PerspectiveCamera(
-        75,
-        window.innerWidth / window.innerHeight,
-        0.1,
-        Config.CAMERA_FAR_PLANE
-    );
-    camera.position.z = Config.CAMERA_INITIAL_POS_Z;
-    camera.position.y = Config.CAMERA_INITIAL_POS_Y;
-
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.outputEncoding = THREE.sRGBEncoding; // Correct encoding for textures
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
-
-    clock = new THREE.Clock();
-    textureLoader = new THREE.TextureLoader();
-}
-
-function setupLighting() {
-    ambientLight = new THREE.AmbientLight(0xffffff, Config.AMBIENT_LIGHT_INTENSITY); // Restored global ambient light
-    scene.add(ambientLight); // Restored global ambient light
-
-    // Revert back to DirectionalLight for debugging Earth lighting
-    sunLight = new THREE.DirectionalLight(0xffffff, Config.SUN_LIGHT_INTENSITY);
-    sunLight.position.set(
-        Config.SUN_LIGHT_POSITION.x,
-        Config.SUN_LIGHT_POSITION.y,
-        Config.SUN_LIGHT_POSITION.z
-    ).normalize(); // Ensure direction is normalized if needed by shader
-    scene.add(sunLight);
-
-
-    // Keep a directional light for consistent directionality if needed, maybe lower intensity
-    // const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-    // directionalLight.position.set(5, 3, 5); // Example direction
-    // scene.add(directionalLight);
-}
-
-function setupControls() {
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.minDistance = 0.1;
-    controls.maxDistance = Config.CONTROLS_MAX_DISTANCE;
-}
-
-async function loadTextures() {
-    // (Texture loading logic remains largely the same as before)
-    const texturePromises = [
-        // Earth Textures
-        textureLoader.loadAsync('earth_day.jpg').then(t => ({ key: 'earthDayLow', texture: t })),
-        textureLoader.loadAsync('earth_night.jpg').then(t => ({ key: 'earthNightLow', texture: t })),
-        textureLoader.loadAsync('2k_earth_specular_map.png').then(t => ({ key: 'earthSpecularLow', texture: t })),
-        textureLoader.loadAsync('earth_clouds.jpg').then(t => ({ key: 'earthCloudsLow', texture: t })),
-        textureLoader.loadAsync('earth_height_map.png').then(t => ({ key: 'earthHeight', texture: t })),
-        textureLoader.loadAsync('2k_earth_normal_map.png').then(t => ({ key: 'earthNormalLow', texture: t })),
-        textureLoader.loadAsync('earth_day_8K.jpg').then(t => ({ key: 'earthDayHigh', texture: t })),
-        textureLoader.loadAsync('earth_night_8K.jpg').then(t => ({ key: 'earthNightHigh', texture: t })),
-        textureLoader.loadAsync('8k_earth_specular_map.png').then(t => ({ key: 'earthSpecularHigh', texture: t })),
-        textureLoader.loadAsync('earth_clouds_8k.jpg').then(t => ({ key: 'earthCloudsHigh', texture: t })),
-        textureLoader.loadAsync('8k_earth_normal_map.png').then(t => ({ key: 'earthNormalHigh', texture: t })),
-        // Sun & Moon
-        textureLoader.loadAsync('8k_sun.jpg').then(t => ({ key: 'sun', texture: t })),
-        textureLoader.loadAsync('8k_moon.jpg').then(t => ({ key: 'moon', texture: t })),
-        // Other Planets
-        ...Config.PLANET_DATA.filter(p => p.name !== "Earth").map(p =>
-             p.textureFile ? textureLoader.loadAsync(p.textureFile).then(t => ({ key: p.name, texture: t })) : Promise.resolve(null)
-        ),
-        // Venus Atmosphere
-        Config.PLANET_DATA.find(p => p.name === "Venus")?.atmosphereTextureFile
-            ? textureLoader.loadAsync(Config.PLANET_DATA.find(p => p.name === "Venus").atmosphereTextureFile).then(t => ({ key: 'venusAtmosphere', texture: t }))
-            : Promise.resolve(null)
-    ];
-
-    const loadedTextures = await Promise.all(texturePromises);
-    const textureMap = {};
-
-    loadedTextures.filter(item => item !== null).forEach(item => {
-        const { key, texture } = item;
-        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-        if (key && !key.toLowerCase().includes('specular') && !key.toLowerCase().includes('height') && !key.toLowerCase().includes('normal') && key !== 'venusAtmosphere') {
-             texture.encoding = THREE.sRGBEncoding;
-        }
-        textureMap[key] = texture;
-    });
-
-    console.log("Textures loaded:", Object.keys(textureMap));
-    return textureMap; // Return the map
-}
-
-function createSharedMaterials(textures) {
-    // Earth Material - Reverted to MeshStandardMaterial
-    earthMaterial = Factory.createStandardMaterial(textures.earthDayLow, { // Use day texture as base map
-        normalMap: textures.earthNormalLow,
-        // normalScale: new THREE.Vector2(Config.EARTH_NORMAL_MAP_SCALE, Config.EARTH_NORMAL_MAP_SCALE), // If scale needed
-        roughnessMap: textures.earthSpecularLow, // Use specular as roughness map
-        roughness: 1.0, // Base roughness
-        metalness: 0.1, // Mostly non-metallic
-        emissiveMap: textures.earthNightLow,
-        emissive: 0xffffff, // Use white to show emissive map colors
-        emissiveIntensity: 1.0 // Adjust intensity as needed
-    });
-    // Note: Removed the old earthUniforms object and Factory.createEarthMaterial call
-
-    // Sun Glow Material
-    const sunGlowUniforms = {
-        uCameraPosition: { value: camera.position },
-        uGlowColor: { value: new THREE.Color(Config.SUN_GLOW_COLOR.r, Config.SUN_GLOW_COLOR.g, Config.SUN_GLOW_COLOR.b) },
-        uGlowIntensity: { value: Config.GLOW_INTENSITY_MULTIPLIER },
-        uTime: { value: 0.0 }, // Add missing uTime uniform for glow noise animation
-        uGlowExponent: { value: Config.GLOW_FALLOFF_EXPONENT }
+    // Background
+    context.fillStyle = `rgba(${backgroundColor.r},${backgroundColor.g},${backgroundColor.b},${backgroundColor.a})`;
+    context.strokeStyle = `rgba(${borderColor.r},${borderColor.g},${borderColor.b},${borderColor.a})`;
+    context.lineWidth = borderThickness;
+    // Simple rounded rect function
+    const roundRect = (ctx, x, y, w, h, r) => {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
     };
-    sunGlowMaterial = Factory.createGlowMaterial(Shaders, sunGlowUniforms);
+    roundRect(context, borderThickness / 2, borderThickness / 2, canvas.width - borderThickness, canvas.height - borderThickness, 10);
 
-    // Earth Atmosphere Material
-    const atmosphereUniforms = {
-        uCameraPosition: { value: camera.position },
-        uGlowColor: { value: new THREE.Color(Config.EARTH_ATMOSPHERE_COLOR.r, Config.EARTH_ATMOSPHERE_COLOR.g, Config.EARTH_ATMOSPHERE_COLOR.b) },
-        uGlowIntensity: { value: Config.GLOW_INTENSITY_MULTIPLIER },
-        uGlowExponent: { value: Config.GLOW_FALLOFF_EXPONENT }
-    };
-    atmosphereMaterial = Factory.createGlowMaterial(Shaders, atmosphereUniforms);
+    // Text
+    context.fillStyle = `rgba(${textColor.r},${textColor.g},${textColor.b},${textColor.a})`;
+    context.fillText(text, canvas.width / 2, canvas.height / 2);
 
-    // Sun Materials
-    sunMaterialBasic = Factory.createBasicMaterial(textures.sun);
-    const sunShaderUniforms = { uTime: { value: 0.0 } };
-    sunMaterialShader = Factory.createShaderMaterial(
-        Shaders.SUN_VERTEX_SHADER,
-        Shaders.SUN_FRAGMENT_SHADER,
-        sunShaderUniforms
-    );
+    // Create texture
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+
+    // Create sprite material
+    const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+
+    // Create sprite
+    const sprite = new THREE.Sprite(spriteMaterial);
+    // Scale sprite based on canvas aspect ratio and desired size
+    sprite.scale.set(scale * canvas.width / canvas.height, scale, 1.0);
+
+    return sprite;
 }
 
-function createTargetIndicator() {
-    const targetMaterial = new THREE.SpriteMaterial({
-        color: 0x00ff00,
-        transparent: true,
-        opacity: 0.6,
-        sizeAttenuation: false,
-        depthTest: false
-    });
-    targetIndicator = new THREE.Sprite(targetMaterial);
-    targetIndicator.scale.set(0.03, 0.03, 1);
-    targetIndicator.visible = !cameraLockedToEarth;
-    scene.add(targetIndicator);
-}
+class SolarSystemSimulation {
+    constructor() {
+        // Core Three.js components
+        this.scene = null;
+        this.camera = null;
+        this.renderer = null;
+        this.controls = null; // OrbitControls
 
-function setupEventListeners() {
-    window.addEventListener('resize', onWindowResize, false);
+        // Timing and animation
+        this.clock = new THREE.Clock();
 
-    // --- UI Button Listeners ---
-    const gravityBtn = document.getElementById('toggle-gravity-btn');
-    const focusBtn = document.getElementById('toggle-focus-btn');
-    const sunShaderBtn = document.getElementById('toggle-sun-shader-btn');
-    const tiltBtn = document.getElementById('toggle-tilt-btn'); // New tilt button
-    const nightLightsBtn = document.getElementById('toggle-night-lights-btn'); // New night lights button
-    const asteroidSlider = document.getElementById('asteroid-group-slider'); // Get slider
-    const asteroidLabel = document.getElementById('asteroid-group-label'); // Get label
+        // Game objects
+        this.planets = [];
+        this.clickableObjects = [];
+        this.moonMesh = null;
+        this.asteroidBelt = null;
+        this.texturesMap = new Map();
 
-    if (gravityBtn) {
-        gravityBtn.textContent = `Gravity: ${physicsEngine.simulationEnabled ? 'On' : 'Off'}`;
-        gravityBtn.addEventListener('click', () => {
-            physicsEngine.simulationEnabled = !physicsEngine.simulationEnabled;
-            console.log(`Gravity Simulation ${physicsEngine.simulationEnabled ? 'Enabled' : 'Disabled'}`);
-            gravityBtn.textContent = `Gravity: ${physicsEngine.simulationEnabled ? 'On' : 'Off'}`;
-            if (physicsEngine.simulationEnabled) {
-                physicsEngine.initializeOrbitalVelocities();
-            }
-        });
-    } else { console.error("Gravity toggle button not found!"); }
+        // Spaceship state
+        this.currentSpaceship = null;
+        this.pulsingMaterials = [];
+        this.rotatingParts = [];
+        // Spaceship physics state
+        this.shipVelocity = new THREE.Vector3();
+        this.shipRotation = new THREE.Quaternion(); // Use Quaternion for reliable rotation
+        this.shipAngularVelocity = new THREE.Vector3(); // Stores pitch/yaw/roll rates
 
-    if (focusBtn) {
-        focusBtn.textContent = `Focus: ${cameraLockedToEarth ? 'Earth' : 'Sun'}`;
-        focusBtn.addEventListener('click', () => {
-            if (cameraLockedToEarth && controls) {
-                controls.minDistance = 0.1;
-                controls.maxDistance = Config.CONTROLS_MAX_DISTANCE;
-            }
-            cameraLockedToEarth = !cameraLockedToEarth;
-            console.log(`Camera Lock to Earth: ${cameraLockedToEarth}`);
-            focusBtn.textContent = `Focus: ${cameraLockedToEarth ? 'Earth' : 'Sun'}`;
-            if (controls) {
-                if (cameraLockedToEarth) {
-                    controls.minDistance = Config.EARTH_RADIUS;
-                    controls.maxDistance = Config.EARTH_RADIUS * 10;
-                } else {
-                    controls.target.set(0, 0, 0);
-                }
-            }
-        });
-    } else { console.error("Focus toggle button not found!"); }
+        // --- Ship Label Sprites ---
+        this.frontLabelSprite = null;
+        this.backLabelSprite = null;
 
-    if (sunShaderBtn) {
-        const sunMesh = solarSystemBuilder.getSunMesh(); // Get sun mesh from builder
-        sunShaderBtn.textContent = `Sun Shader: ${sunShaderEnabled ? 'On' : 'Off'}`;
-        sunShaderBtn.addEventListener('click', () => {
-            if (!sunMesh) {
-                console.error("Sun mesh not found for shader toggle!"); return;
-            }
-            sunShaderEnabled = !sunShaderEnabled;
-            console.log(`Sun Shader ${sunShaderEnabled ? 'Enabled' : 'Disabled'}`);
-            sunMesh.material = sunShaderEnabled ? sunMaterialShader : sunMaterialBasic;
-            sunShaderBtn.textContent = `Sun Shader: ${sunShaderEnabled ? 'On' : 'Off'}`;
-        });
-    } else { console.error("Sun shader toggle button not found!"); }
+        // --- Edit Mode State ---
+        this.isEditMode = false;
 
-    // --- New Tilt Button Listener ---
-    if (tiltBtn) {
-        tiltBtn.textContent = `Axial Tilt: ${axialTiltEnabled ? 'On' : 'Off'}`;
-        tiltBtn.addEventListener('click', () => {
-            axialTiltEnabled = !axialTiltEnabled;
-            tiltBtn.textContent = `Axial Tilt: ${axialTiltEnabled ? 'On' : 'Off'}`;
-            updateEarthTilt(); // Call function to apply the tilt
-            if (Config.DEBUG_MODE) {
-                console.log(`Axial Tilt ${axialTiltEnabled ? 'Enabled' : 'Disabled'}`);
-            }
-        });
-    } else { console.error("Tilt toggle button not found!"); }
+        // Controllers
+        this.cameraController = null;
+        this.inputController = null;
 
-    // --- New Night Lights Button Listener ---
-    if (nightLightsBtn) {
-        nightLightsBtn.textContent = `Night Lights: ${enhancedNightLightsEnabled ? 'Enhanced' : 'Normal'}`;
-        nightLightsBtn.addEventListener('click', () => {
-            enhancedNightLightsEnabled = !enhancedNightLightsEnabled;
-            nightLightsBtn.textContent = `Night Lights: ${enhancedNightLightsEnabled ? 'Enhanced' : 'Normal'}`;
-            // Update the shader uniform directly
-            if (earthMaterial) {
-                earthMaterial.uniforms.uEnableEnhancedNightLights.value = enhancedNightLightsEnabled ? 1.0 : 0.0;
-            }
-            if (Config.DEBUG_MODE) {
-                console.log(`Enhanced Night Lights ${enhancedNightLightsEnabled ? 'Enabled' : 'Disabled'}`);
-                console.log(`Shader uniform uEnableEnhancedNightLights set to: ${enhancedNightLightsEnabled ? 1.0 : 0.0}`);
-            }
-        });
-    } else { console.error("Night lights toggle button not found!"); }
+        // Status
+        this.isInitialized = false;
+        this.loadingSphere = null;
+        this.loadingMaterial = null;
 
+        // Bind event handlers
+        this.onWindowResize = this.onWindowResize.bind(this);
+        this.animate = this.animate.bind(this);
+        this.onFocusPlanet = this.onFocusPlanet.bind(this); // Keep for planet focus via UI
+        this.onGenerateShip = this.onGenerateShip.bind(this); // Keep for button/event
+        this.handleKeyDown = this.handleKeyDown.bind(this); // Bind keydown handler
 
-    // --- Asteroid Slider Listener ---
-    if (asteroidSlider && asteroidLabel) {
-        // Set initial label value based on config (assuming one belt for now)
-        const initialGroupSize = Config.ASTEROID_BELT_DATA[0]?.groupSize || 50;
-        asteroidSlider.value = initialGroupSize;
-        asteroidLabel.textContent = `Asteroid Group Size: ${initialGroupSize}`;
-
-        asteroidSlider.addEventListener('input', () => { // 'input' for live updates
-            const newGroupSize = parseInt(asteroidSlider.value, 10);
-            asteroidLabel.textContent = `Asteroid Group Size: ${newGroupSize}`;
-        });
-
-        asteroidSlider.addEventListener('change', () => { // 'change' after release
-            const newGroupSize = parseInt(asteroidSlider.value, 10);
-            console.log("Slider changed, rebuilding asteroid belt...");
-            // Assuming only one belt named "MainBelt" for now
-            solarSystemBuilder.rebuildAsteroidBelt("MainBelt", newGroupSize);
-            // Re-initialize physics if it's running
-            if (physicsEngine.simulationEnabled) {
-                console.log("Re-initializing physics velocities after belt rebuild.");
-                physicsEngine.initializeOrbitalVelocities();
-            }
-        });
-    } else {
-        console.error("Asteroid slider or label not found!");
-    }
-}
-
-// --- Helper Functions ---
-
-function updateEarthTilt() {
-    const earthSystemAnchor = solarSystemBuilder?.getEarthSystemAnchor(); // Use optional chaining
-    if (earthSystemAnchor) {
-        earthSystemAnchor.rotation.x = axialTiltEnabled ? EARTH_AXIAL_TILT : 0;
-        if (Config.DEBUG_MODE) {
-            console.log(`Applied Earth tilt: ${axialTiltEnabled ? THREE.MathUtils.radToDeg(EARTH_AXIAL_TILT).toFixed(1) : 0} degrees`);
-        }
-    } else if (Config.DEBUG_MODE) {
-        // Log only if the builder should exist but the anchor doesn't
-        if (solarSystemBuilder) {
-            console.warn("updateEarthTilt called, but earthSystemAnchor not found yet.");
-        }
-    }
-}
-
-
-function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-// Removed: onKeyDown (can be added back if needed)
-// Removed: initializeOrbitalVelocities (moved to PhysicsEngine)
-// Removed: updatePhysics (moved to PhysicsEngine)
-// Removed: createSolarSystem (moved to SolarSystemBuilder)
-
-// --- Animation Loop ---
-
-function animate() {
-    requestAnimationFrame(animate);
-
-    const delta = clock.getDelta();
-    const dt = Math.min(delta, 0.016); // Clamped delta time
-    const elapsedTime = clock.getElapsedTime();
-
-    // --- Get dynamic objects from builder ---
-    const sunMesh = solarSystemBuilder.getSunMesh(); // Get sun mesh for flare origin & shader toggle
-    const earthMesh = solarSystemBuilder.getEarthMesh();
-    const cloudMesh = solarSystemBuilder.getCloudMesh();
-    const moonOrbitAnchor = solarSystemBuilder.getMoonOrbitAnchor();
-    const earthSystemAnchor = solarSystemBuilder.getEarthSystemAnchor();
-    const planetOrbits = solarSystemBuilder.getPlanetOrbits(); // Includes asteroid groups now
-
-    // --- Update Camera ---
-    if (cameraLockedToEarth && earthMesh && controls) {
-        earthMesh.getWorldPosition(earthWorldPosition);
-        controls.target.copy(earthWorldPosition);
-    }
-    controls.update(); // Update controls AFTER potentially changing target
-
-    // --- Clamp Camera Distance (if locked) ---
-    if (cameraLockedToEarth && controls) {
-        const currentDistance = controls.getDistance();
-        const minLimit = controls.minDistance;
-        const maxLimit = controls.maxDistance;
-        if (currentDistance > maxLimit || currentDistance < minLimit) {
-            const targetDistance = THREE.MathUtils.clamp(currentDistance, minLimit, maxLimit);
-            const direction = new THREE.Vector3().subVectors(controls.object.position, controls.target).normalize();
-            controls.object.position.copy(controls.target).add(direction.multiplyScalar(targetDistance));
-        }
+        // Initialize the application
+        this.init();
     }
 
-    // --- Update Target Indicator ---
-    if (targetIndicator) {
-        targetIndicator.position.copy(controls.target);
-        targetIndicator.visible = !cameraLockedToEarth;
-    }
+    async init() {
+        // Set up scene
+        this.scene = new THREE.Scene();
 
-    // --- Trigger Flares (Example: Randomly) ---
-    if (sunMesh && flareSystem && Math.random() < 0.01) { // Low probability each frame
-        const surfacePoint = new THREE.Vector3();
-        // Get a random point on the sphere surface
-        surfacePoint.setFromSphericalCoords(
-            Config.SUN_RADIUS + 0.1, // Start slightly above surface
-            Math.acos(2 * Math.random() - 1), // Random phi (latitude)
-            Math.random() * Math.PI * 2 // Random theta (longitude)
+        // Set up camera
+        this.camera = new THREE.PerspectiveCamera(
+            75, 
+            window.innerWidth / window.innerHeight, 
+            0.1, 
+            1000
         );
-        const direction = surfacePoint.clone().normalize(); // Flare direction is outward from surface point
-        flareSystem.createFlare(surfacePoint, direction);
-    }
+        this.camera.position.set(0, 30, 80);
 
-    // --- Update Flare System ---
-    if (flareSystem) {
-        flareSystem.update(dt);
-    }
-
-    // --- Update Shader Uniforms ---
-    // earthMaterial uniforms removed as it's now MeshStandardMaterial
-    sunGlowMaterial.uniforms.uCameraPosition.value.copy(camera.position);
-    sunGlowMaterial.uniforms.uTime.value = elapsedTime; // Add time update for glow noise
-    atmosphereMaterial.uniforms.uCameraPosition.value.copy(camera.position);
-    // atmosphereMaterial.uniforms.uTime.value = elapsedTime; // Add if needed for atmosphere effects later
-    if (sunShaderEnabled && sunMaterialShader) {
-        sunMaterialShader.uniforms.uTime.value = elapsedTime;
-    }
-
-    // --- LOD Check (Earth only for now) ---
-    // Access the higher-scoped textures variable
-    if (earthMesh && cloudMesh && textures.earthDayHigh && earthMaterial instanceof THREE.MeshStandardMaterial) { // Check material type
-        const currentDistance = controls.getDistance(); // Or distance to Earth specifically
-        const isHighRes = (earthMaterial.map === textures.earthDayHigh); // Check base map
-        let needsEarthMaterialUpdate = false;
-
-        if (currentDistance < Config.LOD_ZOOM_THRESHOLD && !isHighRes) {
-            earthMaterial.map = textures.earthDayHigh;
-            earthMaterial.normalMap = textures.earthNormalHigh;
-            earthMaterial.roughnessMap = textures.earthSpecularHigh; // Assuming specular map used for roughness
-            earthMaterial.emissiveMap = textures.earthNightHigh;
-            if (cloudMesh.material) cloudMesh.material.map = textures.earthCloudsHigh;
-            needsEarthMaterialUpdate = true;
-        } else if (currentDistance >= Config.LOD_ZOOM_THRESHOLD && isHighRes) {
-            earthMaterial.map = textures.earthDayLow;
-            earthMaterial.normalMap = textures.earthNormalLow;
-            earthMaterial.roughnessMap = textures.earthSpecularLow; // Assuming specular map used for roughness
-            earthMaterial.emissiveMap = textures.earthNightLow;
-            if (cloudMesh.material) cloudMesh.material.map = textures.earthCloudsLow;
-            needsEarthMaterialUpdate = true;
-        }
-
-        if (needsEarthMaterialUpdate) {
-             earthMaterial.needsUpdate = true; // Flag material for update
-             if (cloudMesh.material) {
-                 cloudMesh.material.needsUpdate = true;
-             }
-        }
-    }
-
-
-    // --- Motion ---
-    // Update physics simulation
-    physicsEngine.update(dt);
-
-    // Simple Rotations (always run for visual effect, physics overrides position if enabled)
-    if (earthMesh) earthMesh.rotation.y += Config.EARTH_ROTATION_SPEED * dt;
-    if (cloudMesh) cloudMesh.rotation.y += (Config.CLOUD_ROTATION_SPEED - Config.EARTH_ROTATION_SPEED) * dt;
-    if (moonOrbitAnchor) moonOrbitAnchor.rotation.y += Config.MOON_ORBIT_SPEED * dt;
-
-    // Rotate anchors for simple orbits (only visually effective if physics is off)
-    if (!physicsEngine.simulationEnabled) {
-        // Note: planetOrbits now includes asteroid group anchors as well
-        planetOrbits.forEach(orbit => {
-            orbit.anchor.rotation.y += orbit.speed * Config.SOLAR_SYSTEM_ORBIT_SPEED_FACTOR * dt;
+        // Set up renderer
+        const canvas = document.getElementById('webgl-canvas');
+        this.renderer = new THREE.WebGLRenderer({ 
+            canvas: canvas, 
+            antialias: true 
         });
+        this.renderer.setPixelRatio(window.devicePixelRatio);
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
+        // Set up controls (OrbitControls)
+        this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+        this.controls.enableDamping = true;
+        this.controls.dampingFactor = 0.05;
+        this.controls.maxDistance = 400;
+        this.controls.enablePan = true; // Keep pan enabled for OrbitControls mode
+
+        // Add lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        this.scene.add(ambientLight);
+
+        const sunLight = new THREE.PointLight(0xffffff, 6.0);
+        this.scene.add(sunLight);
+
+        // Create loading indicator
+        this.createLoadingIndicator();
+
+        // Load textures
+        await this.loadTextures();
+
+        // Remove loading indicator
+        this.removeLoadingIndicator();
+
+        // --- Create Labels (before controllers) ---
+        this.frontLabelSprite = createTextSprite("Front", { scale: 1.5 });
+        this.backLabelSprite = createTextSprite("Back", { scale: 1.5 });
+        this.frontLabelSprite.visible = false;
+        this.backLabelSprite.visible = false;
+        this.scene.add(this.frontLabelSprite); // Add to scene initially detached
+        this.scene.add(this.backLabelSprite);
+
+        // Initialize controllers (Pass sprites to CameraController)
+        this.cameraController = new CameraController(
+            this.camera,
+            this.controls,
+            this.frontLabelSprite, // Pass reference
+            this.backLabelSprite   // Pass reference
+        );
+        this.inputController = new InputController(this.camera, this.controls, this.cameraController);
+        this.inputController.initialize(); // Initialize listeners AFTER DOM is ready and instance exists
+
+        // Create solar system
+        const celestialFactory = new CelestialFactory(this.texturesMap);
+        const solarSystem = celestialFactory.createSolarSystem(this.scene);
+        this.planets = solarSystem.planets;
+        this.clickableObjects = solarSystem.clickableObjects;
+        this.moonMesh = solarSystem.moonMesh;
+        this.asteroidBelt = solarSystem.asteroidBelt;
+        this.inputController.setClickableObjects(this.clickableObjects); // Set clickables
+
+        // Populate planet list dropdown
+        this.populatePlanetDropdown();
+
+        // Generate initial spaceship
+        this.generateNewSpaceship(); // This now also resets physics state
+
+        // Set up event listeners
+        window.addEventListener('resize', this.onWindowResize);
+        document.addEventListener('focus-planet', this.onFocusPlanet); // Listen for UI focus events
+        document.addEventListener('generate-ship', this.onGenerateShip); // Listen for generate event
+        window.addEventListener('keydown', this.handleKeyDown); // Add keydown listener
+
+        // Attach button event listener (redundant if using event, but safe)
+        const generateShipBtn = document.getElementById('generateShipBtn');
+        if (generateShipBtn) {
+            generateShipBtn.addEventListener('click', this.onGenerateShip);
+        }
+
+        this.isInitialized = true;
+        this.animate();
     }
 
-    // Render the scene
-    renderer.render(scene, camera);
+    createLoadingIndicator() {
+        const loadingGeo = new THREE.TorusKnotGeometry(0.8, 0.25, 100, 16);
+        this.loadingMaterial = new THREE.MeshStandardMaterial({
+            color: 0xaaaaaa,
+            emissive: 0x00aaff,
+            emissiveIntensity: 0,
+            roughness: 0.5,
+            metalness: 0.1
+        });
+        this.loadingSphere = new THREE.Mesh(loadingGeo, this.loadingMaterial);
+        this.loadingSphere.position.set(0, 1, 0);
+        this.scene.add(this.loadingSphere);
+        console.log("Loading indicator added.");
+    }
+
+    removeLoadingIndicator() {
+        if (this.loadingSphere) {
+            console.log("Removing loading indicator.");
+            this.scene.remove(this.loadingSphere);
+            this.loadingSphere.geometry.dispose();
+            if (this.loadingMaterial) this.loadingMaterial.dispose();
+            this.loadingSphere = null;
+            this.loadingMaterial = null;
+        }
+    }
+
+    async loadTextures() {
+        console.log("Starting texture loading...");
+        const textureLoader = new THREE.TextureLoader();
+        const textureLoadPromises = [];
+        const textureKeys = Object.keys(textureFiles);
+
+        for (const key of textureKeys) {
+            const url = baseURL + textureFiles[key];
+            const isColorData = !(key === 'saturnRing'); // Handle alpha textures differently
+            
+            textureLoadPromises.push(
+                textureLoader.loadAsync(url)
+                    .then(texture => {
+                        if (isColorData) { 
+                            texture.colorSpace = THREE.SRGBColorSpace; 
+                        }
+                        this.texturesMap.set(key, texture);
+                        console.log(`Texture loaded: ${key}`);
+                    })
+                    .catch(error => {
+                        console.error(`Failed to load texture: ${key} (${url})`, error);
+                        this.texturesMap.set(key, null);
+                    })
+            );
+        }
+        
+        await Promise.all(textureLoadPromises);
+        console.log("Texture loading finished.");
+    }
+
+    populatePlanetDropdown() {
+        const dropdownContent = document.getElementById('planetListDropdown');
+        if (!dropdownContent) return;
+        
+        // Clear existing content
+        dropdownContent.innerHTML = '<button data-name="Background">Reset Focus</button>';
+        
+        // Add Sun button
+        const sunButton = document.createElement('button');
+        sunButton.textContent = "Sun";
+        sunButton.dataset.name = "Sun";
+        dropdownContent.appendChild(sunButton);
+        
+        // Add planet buttons
+        this.planets.forEach(planet => {
+            const button = document.createElement('button');
+            button.textContent = planet.name;
+            button.dataset.name = planet.name;
+            dropdownContent.appendChild(button);
+        });
+        
+        // Add Moon button if Moon exists
+        if (this.moonMesh) {
+            const moonButton = document.createElement('button');
+            moonButton.textContent = "Moon";
+            moonButton.dataset.name = "Moon";
+            dropdownContent.appendChild(moonButton);
+        }
+    }
+
+    generateNewSpaceship() {
+        // --- Cleanup existing ship ---
+        this.pulsingMaterials = [];
+        this.rotatingParts = [];
+        if (this.currentSpaceship) {
+            this.scene.remove(this.currentSpaceship);
+            // Remove ship and its parts from clickable objects
+            this.clickableObjects = this.clickableObjects.filter(
+                obj => obj !== this.currentSpaceship &&
+                      obj.userData?.parentShip !== this.currentSpaceship
+            );
+            // Dispose geometry/materials
+            this.currentSpaceship.traverse(object => {
+                if (object.isMesh) {
+                    if (object.geometry) object.geometry.dispose();
+                    if (Array.isArray(object.material)) {
+                        object.material.forEach(material => material.dispose());
+                    } else if (object.material) {
+                        object.material.dispose();
+                    }
+                }
+            });
+            console.log("Previous spaceship removed and disposed.");
+
+            // Detach labels if they were attached
+            if (this.frontLabelSprite.parent === this.currentSpaceship) {
+                this.currentSpaceship.remove(this.frontLabelSprite);
+            }
+            if (this.backLabelSprite.parent === this.currentSpaceship) {
+                this.currentSpaceship.remove(this.backLabelSprite);
+            }
+        }
+
+        // --- Exit edit mode if active ---
+        if (this.isEditMode) {
+            this.toggleEditMode(); // Turn off edit mode before generating new ship
+        }
+
+        // --- Create new ship ---
+        try {
+            const spaceshipFactory = new SpaceshipFactory();
+            const result = spaceshipFactory.createSpaceship(); // Factory sets initial position/scale
+
+            this.currentSpaceship = result.spaceship;
+            this.pulsingMaterials = result.pulsingMaterials;
+            this.rotatingParts = result.rotatingParts;
+
+            // --- Reset physics state ---
+            this.shipVelocity.set(0, 0, 0);
+            // Start with the ship's initial orientation from the factory
+            this.shipRotation.copy(this.currentSpaceship.quaternion);
+            this.shipAngularVelocity.set(0, 0, 0);
+
+            this.scene.add(this.currentSpaceship);
+            this.clickableObjects.push(this.currentSpaceship); // Add base ship group
+            // Add child meshes to clickable objects as well? Maybe not needed if base group is clicked.
+            this.inputController.setClickableObjects(this.clickableObjects); // Update clickables
+
+            // --- Attach Labels to New Ship ---
+            // Position relative to the ship's origin
+            this.frontLabelSprite.position.set(0, 6.0, 0); // Updated Front Position (+Y)
+            this.backLabelSprite.position.set(0, -6.0, 0); // Updated Back Position (-Y)
+            this.currentSpaceship.add(this.frontLabelSprite);
+            this.currentSpaceship.add(this.backLabelSprite);
+            // Visibility will be controlled by CameraController
+
+            console.log("New spaceship generated.");
+
+            // --- Focus camera on the new ship ---
+            this.cameraController.focusOnObject(this.currentSpaceship);
+
+        } catch (error) {
+            console.error("Error generating spaceship:", error);
+            this.currentSpaceship = null; // Ensure it's null on error
+        }
+    }
+
+    onWindowResize() {
+        if (this.camera && this.renderer) {
+            this.camera.aspect = window.innerWidth / window.innerHeight;
+            this.camera.updateProjectionMatrix();
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    }
+
+    onFocusPlanet(event) { // Handles focus requests from UI dropdown
+        const planetName = event.detail.planetName;
+        let objectToFocus = null;
+
+        if (planetName === 'Background') {
+            this.cameraController.resetFocus();
+            return;
+        } else if (planetName === 'Sun') {
+            objectToFocus = this.scene.children.find(obj => obj.userData?.name === 'Sun');
+        } else if (planetName === 'Moon') {
+            objectToFocus = this.moonMesh;
+        } else {
+            const foundPlanetData = this.planets.find(p => p.name === planetName);
+            if (foundPlanetData) objectToFocus = foundPlanetData.mesh;
+        }
+
+        if (objectToFocus) {
+            this.cameraController.focusOnObject(objectToFocus);
+        } else {
+            console.warn(`Could not find mesh for ${planetName} to focus.`);
+        }
+    }
+
+    onGenerateShip() { // Handles generate request from button/event
+        this.generateNewSpaceship();
+    }
+
+    // --- Updated: Keydown Handler ---
+    handleKeyDown(event) {
+        // Handle Edit Mode Toggle ('P')
+        if (event.key.toUpperCase() === 'P') {
+            this.toggleEditMode(); // This function handles ship focus check
+        }
+        // Let InputController handle 'R', 'W', 'S' etc.
+    }
+
+    // --- Updated: Toggle Edit Mode Logic ---
+    toggleEditMode() {
+        if (!this.currentSpaceship || this.cameraController.targetObject !== this.currentSpaceship) {
+            console.log("Edit mode only available when focused on the spaceship.");
+            return; // Only allow edit mode when focused on the ship
+        }
+
+        // --- Disable Ship Navigation Mode when entering Edit Mode ---
+        if (!this.isEditMode && this.inputController.shipNavigationModeActive) {
+            this.inputController.toggleShipNavigationMode(); // Turn off mouse steering
+        }
+
+        this.isEditMode = !this.isEditMode;
+        console.log("Edit Mode:", this.isEditMode ? "ON" : "OFF");
+
+        if (this.isEditMode) {
+            this.cameraController.enterEditMode(this.currentSpaceship);
+        } else {
+            this.cameraController.exitEditMode();
+            this.cameraController.focusOnObject(this.currentSpaceship);
+            // Note: Exiting edit mode defaults to UI interaction mode (ship nav mode remains off)
+        }
+    }
+
+    animate() {
+        requestAnimationFrame(this.animate);
+
+        const delta = Math.min(this.clock.getDelta(), 0.1);
+        const elapsed = this.clock.getElapsedTime();
+
+        // --- Get Input ---
+        // getShipControls now handles prioritization based on active modes
+        const shipControls = this.inputController.getShipControls(delta);
+
+        // --- Update Spaceship Physics (if ship exists AND not in edit mode) ---
+        if (this.currentSpaceship && !this.isEditMode) {
+            // Use the controls returned by getShipControls
+            let effectiveControls = shipControls || { thrust: 0, pitch: 0, yaw: 0, roll: 0 };
+
+            // 1. Calculate Force/Acceleration based on thrust
+            const forwardVector = new THREE.Vector3(0, 1, 0).applyQuaternion(this.shipRotation);
+            let acceleration = new THREE.Vector3();
+            if (effectiveControls.thrust > 0) {
+                acceleration.addScaledVector(forwardVector, effectiveControls.thrust * shipSettings.THRUST_FORCE);
+            } else if (effectiveControls.thrust < 0) {
+                acceleration.addScaledVector(forwardVector, effectiveControls.thrust * shipSettings.DECELERATION_FORCE);
+            }
+
+            // 2. Update Velocity
+            this.shipVelocity.addScaledVector(acceleration, delta);
+            this.shipVelocity.multiplyScalar(Math.pow(shipSettings.LINEAR_DAMPING, delta * 60));
+
+            // 3. Clamp Velocity
+            const currentSpeed = this.shipVelocity.length();
+            const direction = this.shipVelocity.clone().normalize();
+            if (currentSpeed > shipSettings.MAX_SPEED && acceleration.dot(direction) > 0) {
+                this.shipVelocity.copy(direction.multiplyScalar(shipSettings.MAX_SPEED));
+            } else if (currentSpeed > Math.abs(shipSettings.MIN_SPEED) && acceleration.dot(direction) < 0) {
+                this.shipVelocity.copy(direction.multiplyScalar(Math.abs(shipSettings.MIN_SPEED)));
+            }
+
+            // 4. Calculate Angular Velocity based on stick/tilt input
+            this.shipAngularVelocity.set(
+                effectiveControls.pitch * shipSettings.PITCH_SPEED,
+                effectiveControls.roll * shipSettings.ROLL_SPEED,
+                effectiveControls.yaw * shipSettings.YAW_SPEED
+            );
+
+            // 5. Update Rotation
+            const deltaRotation = new THREE.Quaternion().setFromEuler(
+                new THREE.Euler(
+                    this.shipAngularVelocity.x * delta,
+                    this.shipAngularVelocity.y * delta,
+                    this.shipAngularVelocity.z * delta,
+                    'YXZ'
+                )
+            );
+            this.shipRotation.premultiply(deltaRotation);
+            this.shipRotation.normalize();
+
+            // 6. Update Ship Position
+            this.currentSpaceship.position.addScaledVector(this.shipVelocity, delta);
+
+            // 7. Apply Ship Orientation
+            this.currentSpaceship.quaternion.copy(this.shipRotation);
+
+            // Animate spaceship components
+            const pulseIntensity = 0.75 + Math.sin(elapsed * Math.PI * 2.0) * 0.25;
+            this.pulsingMaterials.forEach(material => {
+                material.emissiveIntensity = pulseIntensity;
+            });
+            const rotationSpeed = delta * 0.8;
+            this.rotatingParts.forEach(part => {
+                part.rotation.y += rotationSpeed;
+            });
+
+        } else if (this.currentSpaceship && this.isEditMode) {
+            const pulseIntensity = 0.75 + Math.sin(elapsed * Math.PI * 2.0) * 0.25;
+            this.pulsingMaterials.forEach(material => {
+                material.emissiveIntensity = pulseIntensity;
+            });
+            const rotationSpeed = delta * 0.8;
+            this.rotatingParts.forEach(part => {
+                part.rotation.y += rotationSpeed;
+            });
+        }
+
+        // --- Update Camera ---
+        this.cameraController.update(delta, this.isEditMode);
+
+        // --- Update Planets ---
+        if (this.isInitialized) {
+            this.planets.forEach(planet => {
+                if (planet.pivot) planet.pivot.rotation.y += planet.orbitSpeed * delta * 10;
+                if (planet.mesh) planet.mesh.rotateY(planet.rotationSpeed * delta * 10);
+                if (planet.cloudMesh) planet.cloudMesh.rotateY(planet.rotationSpeed * 1.1 * delta * 10);
+                if (planet.moonPivot) {
+                    planet.moonPivot.rotation.y += planet.moonOrbitSpeed * delta * 10;
+                    if (this.moonMesh) this.moonMesh.rotateY(planet.rotationSpeed * delta * 5);
+                }
+            });
+            if (this.asteroidBelt) {
+                this.asteroidBelt.rotation.y += 0.0001 * delta * 60;
+            }
+        }
+
+        // --- Update OrbitControls ---
+        if (this.controls && (this.cameraController.orbitControlsEnabled || this.isEditMode)) {
+            this.controls.update();
+        }
+
+        // --- Render ---
+        if (this.renderer && this.scene && this.camera) {
+            this.renderer.render(this.scene, this.camera);
+        }
+    }
 }
 
-// --- Start ---
-init();
+// Initialize
+window.addEventListener('DOMContentLoaded', () => {
+    new SolarSystemSimulation();
+});

@@ -1,0 +1,214 @@
+body { 
+    margin: 0; 
+    overflow: hidden; 
+    background-color: #000; 
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    touch-action: none;
+}
+
+/* --- UI Styling (Google Inspired) --- */
+.ui-container {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(32, 33, 36, 0.9);
+    padding: 8px;
+    border-radius: 24px;
+    z-index: 100;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Style for buttons inside the container */
+.ui-container button {
+    padding: 8px 16px;
+    cursor: pointer;
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #e8eaed;
+    border: none;
+    border-radius: 16px;
+    font-size: 14px;
+    transition: background-color 0.2s ease;
+    white-space: nowrap;
+}
+
+.ui-container button:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Container for the dropdown relative to the button */
+.dropdown-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+#planetListDropdown {
+    display: none;
+    position: absolute;
+    bottom: 110%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(45, 46, 48, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 5px;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 8px;
+    width: 180px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+#planetListDropdown button {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    margin-bottom: 3px;
+    cursor: pointer;
+    background-color: transparent;
+    color: #e8eaed;
+    border: none;
+    border-radius: 4px;
+    text-align: left;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+#planetListDropdown button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+#planetListDropdown button:last-child { 
+    margin-bottom: 0; 
+}
+
+#distanceControl {
+    display: flex;
+    align-items: center;
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 4px 12px;
+    border-radius: 16px;
+    margin-left: 8px;
+}
+
+#distanceControl label {
+    margin: 0 5px 0 0;
+    font-size: 13px;
+    color: #bdc1c6;
+    white-space: nowrap;
+}
+
+#distanceSlider {
+    width: 100px;
+    height: 4px;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+    appearance: none;
+    -webkit-appearance: none;
+    margin: 0 5px;
+}
+
+/* Style slider thumb */
+#distanceSlider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: #8ab4f8;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+#distanceSlider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: #8ab4f8;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+#distanceValue {
+    margin-left: 5px;
+    font-size: 13px;
+    color: #bdc1c6;
+    min-width: 30px;
+    text-align: right;
+}
+
+/* --- Mobile Control Buttons --- */
+.mobile-control-btn {
+    position: fixed;
+    bottom: 30px;
+    width: 80px; /* Larger touch area */
+    height: 80px;
+    background-color: rgba(255, 255, 255, 0.25);
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    border-radius: 50%; /* Circular buttons */
+    z-index: 100;
+    display: none; /* Start hidden, JS will show them on touch devices */
+    justify-content: center;
+    align-items: center;
+    user-select: none; /* Prevent text selection */
+    -webkit-user-select: none; /* Safari */
+    touch-action: manipulation; /* Improve touch responsiveness */
+    opacity: 0.7;
+}
+
+.mobile-control-btn.left {
+    left: 30px;
+    /* Add arrow or symbol for brake/reverse */
+}
+
+.mobile-control-btn.right {
+    right: 30px;
+    /* Add arrow or symbol for thrust */
+}
+
+/* Visual feedback on touch */
+.mobile-control-btn:active {
+    background-color: rgba(255, 255, 255, 0.5);
+    opacity: 1.0;
+}
+
+/* Hide mobile buttons by default on non-touch devices (CSS fallback) */
+@media (hover: hover) and (pointer: fine) {
+    .mobile-control-btn {
+        display: none !important; /* Use !important to override JS if needed, though JS should handle it */
+    }
+    #enableMotionBtn { /* Also hide motion button via CSS */
+         display: none !important;
+    }
+}
+
+/* Ensure motion button is hidden by default */
+#enableMotionBtn {
+    display: none; /* JS will show it on touch devices */
+    margin: 5px;
+    padding: 8px 12px;
+}
+
+/* --- Mouse Indicator --- */
+#mouse-indicator {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    font-size: 24px; /* Adjust size as needed */
+    z-index: 1001;
+    display: none; /* Hidden by default, JS controls visibility */
+    opacity: 0.7;
+    user-select: none;
+    -webkit-user-select: none;
+}

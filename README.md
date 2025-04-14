@@ -1,64 +1,71 @@
-# Interactive 3D Solar System Simulation with Three.js
+# Terra - Solar System Simulation
 
-This project displays an interactive 3D model of our solar system, rendered using the Three.js library. It showcases various celestial bodies, visual effects, and an optional N-body gravity simulation.
+A simple interactive 3D simulation of a solar system built with Three.js. Fly a spaceship between planets, view celestial bodies, and experiment with different control schemes.
 
 ## Features
 
-*   **Solar System Representation:** Includes the Sun, Mercury, Venus, Earth (with Moon), Mars, Jupiter, Saturn (with rings), Uranus, and Neptune.
-*   **Realistic Textures:** Uses high-resolution textures for planets where available.
-*   **Earth Details:**
-    *   Day/Night textures blended based on Sun position.
-    *   Specular map for oceans/water bodies.
-    *   Normal mapping for surface detail (toggleable via shader uniform, though no UI control currently).
-    *   Cloud layer rotating independently.
-    *   Atmospheric glow effect.
-*   **Saturn's Rings:** Basic ring geometry around Saturn.
-*   **Asteroid Belt:** A procedurally generated asteroid belt (using `THREE.Points`) located between Mars and Jupiter.
-*   **Optional N-Body Gravity:**
-    *   Toggleable simple N-body gravity simulation using Euler integration.
-    *   When enabled, planets and asteroid belt groups orbit based on gravitational forces.
-    *   When disabled, objects follow simple circular orbits.
-*   **Asteroid Belt Physics Grouping:**
-    *   The asteroid belt is simulated in groups for performance.
-    *   A UI slider allows adjusting the number of asteroids per physics group, dynamically rebuilding the belt.
-*   **Camera Controls:**
-    *   Standard OrbitControls (rotate, zoom, pan).
-    *   Toggleable focus lock between the Sun (origin) and Earth.
-*   **Visual Effects:**
-    *   Glow effects for the Sun and Earth's atmosphere.
-    *   Toggleable custom shader effect for the Sun.
-*   **Texture Level-of-Detail (LOD):** Automatically switches Earth textures based on camera distance.
-*   **Code Structure:** Refactored into modules for better organization (`PhysicsEngine`, `SolarSystemBuilder`).
-
-## Demo
-
-To view the demo, simply open the `index.html` file in a modern web browser that supports WebGL and ES modules.
-
-## Technical Details
-
-*   **Engine:** Built with [Three.js](https://threejs.org/) (r163).
-*   **Modules:** Uses ES module imports via an import map. Code is organized into:
-    *   `main.js`: Main application loop, setup, event handling.
-    *   `config.js`: Constants and data for celestial bodies and simulation parameters.
-    *   `celestialFactory.js`: Helper functions for creating geometries and basic materials.
-    *   `shaders.js`: GLSL shader code for Earth, Sun effect, and glows.
-    *   `PhysicsEngine.js`: Class managing celestial bodies and N-body simulation logic.
-    *   `SolarSystemBuilder.js`: Class responsible for creating and managing all scene objects based on config.
-*   **Physics:** Implements a basic N-body simulation using Euler integration when toggled on. The asteroid belt is simulated as multiple groups, each treated as a single body in the simulation.
-*   **Asteroids:** Represented using `THREE.Points` for performance, generated procedurally within a torus volume.
+*   Basic solar system model (Sun, planets, Moon, asteroid belt).
+*   Flyable spaceship with physics-based movement.
+*   Multiple control options:
+    *   Keyboard & Mouse
+    *   Gamepad (Xbox controller layout assumed)
+    *   Mobile Touch & Gyroscope
+*   Camera system with focus switching (planets, ship, reset).
+*   Follow-camera mode for the spaceship.
+*   Edit Mode for adjusting camera offset and sprite positions relative to the ship.
 
 ## Controls
 
-*   **Rotate View:** Click and drag the left mouse button.
-*   **Zoom:** Use the mouse scroll wheel.
-*   **Pan View:** Click and drag the right mouse button (or Ctrl + left-click/drag).
-*   **UI Buttons (Bottom Left):**
-    *   **Gravity:** Toggles the N-body physics simulation On/Off.
-    *   **Focus:** Switches the camera's orbit target between Earth and the Sun.
-    *   **Sun Shader:** Toggles a custom visual effect on the Sun.
-*   **UI Slider (Bottom Left):**
-    *   **Asteroid Group Size:** Adjusts how many asteroids are grouped into a single object for the physics simulation (lower values = more groups, potentially slower physics). The belt rebuilds when the slider value changes.
+### General UI
 
-## License
+*   **Mouse Click:** Click on planets, Sun, Moon, or the spaceship to focus the camera.
+*   **Focus Button:** Open dropdown to select a celestial body or reset focus.
+*   **Generate Ship Button:** Creates a new spaceship at the origin.
 
-This project is licensed under the terms specified in the [LICENSE](LICENSE) file.
+### Spaceship Navigation (Select one method)
+
+**1. Keyboard & Mouse Mode:**
+
+*   **R Key:** Toggle Ship Navigation Mode ON/OFF.
+    *   **Mode ON:** Mouse cursor hidden, mouse controls ship direction, UI interaction disabled.
+    *   **Mode OFF:** Mouse cursor visible, UI interaction enabled.
+*   **Mouse Movement (Mode ON):** Steer the ship (Pitch/Yaw).
+*   **W Key (Mode ON):** Accelerate forward.
+*   **S Key (Mode ON):** Decelerate / Reverse thrust.
+
+**2. Gamepad (Xbox Layout):**
+
+*   **Right Trigger:** Accelerate forward.
+*   **Left Trigger:** Decelerate / Reverse thrust.
+*   **Left Stick:** Pitch (Up/Down) & Yaw (Left/Right).
+*   **Right Stick:** Roll (Left/Right).
+*   **Y Button:** Generate new spaceship.
+*   **B Button:** Reset camera focus.
+*   *(Gamepad icon 🎮 appears top-right when connected)*
+
+**3. Mobile (Touch & Gyroscope):**
+
+*   **(Requires enabling motion controls via button first)**
+*   **Tilt Device Forward/Backward:** Pitch ship Up/Down.
+*   **Tilt Device Left/Right:** Roll ship Left/Right.
+*   **Right On-Screen Button:** Accelerate forward.
+*   **Left On-Screen Button:** Decelerate / Reverse thrust.
+*   *(Buttons only appear on touch devices)*
+
+### Edit Mode (Spaceship Focused)
+
+*   **P Key:** Toggle Edit Mode ON/OFF (only when spaceship is the camera focus).
+    *   **Mode ON:** Ship movement paused, OrbitControls enabled around the ship, editors appear.
+    *   **Mode OFF:** Resumes follow-camera and ship movement.
+*   **Camera Offset Editor (Top-Left):** Adjust the X, Y, Z values for the follow-camera position relative to the ship.
+*   **Sprite Position Editor (Top-Left):** Adjust the local X, Y, Z position of the "Front" and "Back" labels relative to the ship.
+
+## Running the Project
+
+1.  You need a local web server to run this project due to browser security restrictions (CORS) when loading textures and modules.
+2.  Navigate to the project directory (`/home/philipmathew/Github/Terra/`) in your terminal.
+3.  Start a simple web server. Examples:
+    *   **Using Python 3:** `python -m http.server`
+    *   **Using Node.js (with `http-server` package):** `npx http-server`
+    *   **Using VS Code Live Server extension.**
+4.  Open your web browser and navigate to the local address provided by the server (e.g., `http://localhost:8000` or `http://127.0.0.1:8080`).
